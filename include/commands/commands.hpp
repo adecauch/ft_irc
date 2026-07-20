@@ -2,36 +2,49 @@
 # define COMMANDS_HPP
 
 /* ========================================================================== */
-/*                      STRING DEFINITIONS (IRC COMMANDS)                     */
+/*                      IRC COMMAND IDENTIFIERS                               */
+/*                                                                            */
+/*  This file centralizes all string definitions and enum values for IRC      */
+/*  commands used across the server's parser and command execution modules.   */
 /* ========================================================================== */
 
-// Authentification & Connexion
-# define CMD_PASS     "PASS"
-# define CMD_NICK     "NICK"
-# define CMD_USER     "USER"
-# define CMD_QUIT     "QUIT"
+// -----------------------------------------------------------------------------
+//  1. STRING DEFINITIONS (IRC COMMAND STRINGS)
+// -----------------------------------------------------------------------------
 
-// Gestion des Canaux
-# define CMD_JOIN     "JOIN"
-# define CMD_PART     "PART"
-# define CMD_TOPIC    "TOPIC"
-# define CMD_KICK     "KICK"
-# define CMD_INVITE   "INVITE"
-# define CMD_MODE     "MODE"
+// [ROLE] : Authentication & Connection Handshake
+// [WHEN TO USE] : Used by the parser to identify client registration commands.
+# define CMD_PASS     "PASS"     // Sets or validates the server password
+# define CMD_NICK     "NICK"     // Sets or changes the client's nickname
+# define CMD_USER     "USER"     // Specifies username, hostname, and real name
+# define CMD_QUIT     "QUIT"     // Terminates the client session cleanly
 
-// Communication & Divers
-# define CMD_PRIVMSG  "PRIVMSG"
-# define CMD_NOTICE   "NOTICE"
-# define CMD_PING     "PING"
-# define CMD_PONG     "PONG"
-# define CMD_CAP      "CAP"
-# define CMD_WHO      "WHO"
-# define CMD_WHOIS    "WHOIS"
+// [ROLE] : Channel Operations & Administration
+// [WHEN TO USE] : Used when clients attempt to join, leave, or modify channels.
+# define CMD_JOIN     "JOIN"     // Joins or creates a channel
+# define CMD_PART     "PART"     // Leaves one or more channels
+# define CMD_TOPIC    "TOPIC"    // Views or changes a channel's topic
+# define CMD_KICK     "KICK"     // Expels a user from a channel (Operator only)
+# define CMD_INVITE   "INVITE"   // Invites a user to a restricted channel
+# define CMD_MODE     "MODE"     // Alters channel/user modes (+i, +t, +k, +o, +l)
 
-/* ========================================================================== */
-/*                           ENUM FOR LOGIC & EXEC                            */
-/* ========================================================================== */
+// [ROLE] : Communication & Network Utilities
+// [WHEN TO USE] : Handled during messaging and heartbeats.
+# define CMD_PRIVMSG  "PRIVMSG"  // Sends a private message to a user or channel
+# define CMD_NOTICE   "NOTICE"   // Sends a notification (must not generate automated replies)
+# define CMD_PING     "PING"     // Tests connection responsiveness from peer
+# define CMD_PONG     "PONG"     // Responds to incoming PING requests
+# define CMD_CAP      "CAP"      // Capability negotiation sent by modern clients (Irssi)
+# define CMD_WHO      "WHO"      // Queries information about matching users
+# define CMD_WHOIS    "WHOIS"    // Queries detailed user profile information
 
+// -----------------------------------------------------------------------------
+//  2. ENUM FOR LOGIC & EXECUTION ROUTING
+// -----------------------------------------------------------------------------
+
+// [ROLE] : Fast command identification using numerical representations.
+// [WHY] : Comparing enums in switch statements is significantly faster than
+//         performing repeated string comparisons during execution.
 enum e_command
 {
     CMD_UNKNOWN = 0,
@@ -61,5 +74,3 @@ enum e_command
 };
 
 #endif
-
-
