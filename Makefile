@@ -6,7 +6,7 @@
 #    By: adecauch <adecauch@student.42.fr>          +#+  +:+       +#+         #
 #                                                 +#+#+#+#+#+   +#+            #
 #    Created: 2025/10/27 09:10:07 by adecauch          #+#    #+#              #
-#    Updated: 2026/07/20 18:49:54 by adecauch         ###   ########.fr        #
+#    Updated: 2026/07/20 19:03:37 by adecauch         ###   ########.fr        #
 #                                                                              #
 # **************************************************************************** #
 
@@ -18,7 +18,7 @@ CXX = c++
 INC = -Iinc
 CXXFLAGS = -Wall -Wextra -Werror -std=c++98 $(INC)
 
-NAME = irc
+NAME = ircserv
 
 SRCS =	srcs/main.cpp \
 		srcs/Client.cpp \
