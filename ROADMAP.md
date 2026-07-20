@@ -67,7 +67,7 @@ Ce qui manque côté logique (le gros du travail) :
 ### Étape 3 — Parsing + dispatch générique (moyen) — en cours
 
 - [x] Parser une ligne IRC : commande + liste de paramètres + paramètre "trailing" après `" :"`. → `Parser::parse()` dans `include/Parser.hpp` / `srcs/Parser.cpp`, branché dans `Server::_readClientData` (log `[DEBUG]` en attendant le dispatch réel). Gère : params multiples, trailing (y compris vide), espaces multiples, préfixe `:nick` optionnel en tête de ligne, casse (commande normalisée en majuscules), et n'importe quel binaire/garbage sans planter.
-- [ ] Brancher ce parsing sur l'enum de `commands.hpp`.
+- [x] Brancher ce parsing sur l'enum de `commands.hpp`. → `resolveCommand()` déclarée dans `include/commands/commands.hpp`, implémentée dans `srcs/commands/commands.cpp` (table `{nom, enum}` + recherche linéaire, 17 entrées). Appelée juste après `Parser::parse()` dans `_readClientData`. Testé : les 17 commandes (casse mélangée) résolvent vers le bon ordinal, commande inconnue et ligne vide → `CMD_UNKNOWN`.
 - [ ] Répondre `421` (déjà défini) pour toute commande inconnue ; ne jamais planter sur une entrée absurde (ligne vide, commande sans paramètre, données binaires, flood...).
 
 **Fini quand** : n'importe quelle ligne envoyée au serveur produit soit un traitement, soit une erreur propre — jamais un crash.

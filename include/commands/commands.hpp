@@ -1,6 +1,8 @@
 #ifndef COMMANDS_HPP
 # define COMMANDS_HPP
 
+# include <string>
+
 /* ========================================================================== */
 /*                      IRC COMMAND IDENTIFIERS                               */
 /*                                                                            */
@@ -72,5 +74,16 @@ enum e_command
     CMD_ENUM_WHO,
     CMD_ENUM_WHOIS
 };
+
+// -----------------------------------------------------------------------------
+//  3. STRING -> ENUM RESOLUTION
+// -----------------------------------------------------------------------------
+
+// [ROLE] : Maps a parsed command word to its e_command identifier.
+// [WHEN TO USE] : Called right after Parser::parse(), before dispatching.
+// [WHY] : Expects the command already uppercased (Parser::parse() does this),
+//         so this only does exact matches against the CMD_* strings above.
+// [RETURN] : CMD_UNKNOWN when the word does not match any known command.
+e_command resolveCommand(const std::string& command);
 
 #endif

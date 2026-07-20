@@ -1,5 +1,6 @@
 #include "../include/Server.hpp"
 #include "../include/Parser.hpp"
+#include "../include/commands/commands.hpp"
 
 /* ========================================================================== */
 /*                         ORTHODOX CANONICAL FORM                            */
@@ -179,14 +180,16 @@ bool Server::_readClientData(int fd) {
     std::string commandLine;
     while (client.extractNextLine(commandLine)) {
         IrcMessage message = Parser::parse(commandLine);
+        e_command  type = resolveCommand(message.command);
 
-        std::cout << "[DEBUG] FD " << fd << " command=\"" << message.command << "\"";
+        std::cout << "[DEBUG] FD " << fd << " command=\"" << message.command
+                  << "\" type=" << type;
         for (size_t p = 0; p < message.params.size(); ++p) {
             std::cout << " params[" << p << "]=\"" << message.params[p] << "\"";
         }
         std::cout << std::endl;
 
-        // Le dispatch vers les handlers (et la réponse 421) viendra ensuite.
+        // Le dispatch vers les handlers (et la réponse 421 pour CMD_UNKNOWN) viendra ensuite.
     }
     return true;
 }
