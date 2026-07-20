@@ -216,6 +216,14 @@ void Server::start() {
     }
 }
 
+// [ROLE] : Async-signal-safe stop request, used by the SIGINT/SIGQUIT handler.
+// [WHY] : stop() closes sockets and clears STL containers, which is unsafe to run
+//         from inside a signal handler; this only sets the flag that the poll()
+//         loop in start() already checks once it is interrupted (EINTR).
+void Server::requestStop() {
+    this->_isRunning = false;
+}
+
 // [ROLE] : Stops main loop and closes all client and listening sockets cleanly.
 void Server::stop() {
     if (!this->_isRunning && this->_serverSocketFd == -1) {

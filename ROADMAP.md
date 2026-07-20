@@ -46,11 +46,11 @@ Ce qui manque côté logique (le gros du travail) :
 
 ## 3. Étapes
 
-### Étape 1 — Squelette exécutable (petit)
+### Étape 1 — Squelette exécutable (petit) ✅
 
-- [ ] `main.cpp` : parse `argv` (port + password), valide le port, instancie `Server`, `try/catch` autour du démarrage (aucune exception ne doit remonter jusqu'à un crash).
-- [ ] Gestion de `SIGINT`/`SIGQUIT` (`signal`/`sigaction`) pour arrêter proprement la boucle — `Server::stop()` existe déjà, il suffit de la brancher.
-- [ ] `Makefile` : règles `NAME`, `all`, `clean`, `fclean`, `re`, compilation en `c++ -Wall -Wextra -Werror`, conforme C++98 (doit compiler aussi avec `-std=c++98` explicite), pas de relink inutile (compilation objet par objet).
+- [x] `main.cpp` : parse `argv` (port + password), valide le port, instancie `Server`, `try/catch` autour du démarrage (aucune exception ne doit remonter jusqu'à un crash).
+- [x] Gestion de `SIGINT`/`SIGQUIT` (`sigaction`) pour arrêter proprement la boucle — signal handler minimal (`Server::requestStop()`, juste un flag) + cleanup réel dans `Server::stop()` appelé hors du handler, pour rester async-signal-safe.
+- [x] `Makefile` : règles `NAME`, `all`, `clean`, `fclean`, `re`, compilation en `c++ -Wall -Wextra -Werror -std=c++98`, pas de relink inutile. (Un `-Iinc` → `-Iinclude` corrigé, c'est ce qui cassait la compilation.)
 
 **Fini quand** : `./ircserv 6667 pass` tourne, accepte une connexion `nc 127.0.0.1 6667` sans planter, s'arrête proprement au `Ctrl+C`.
 

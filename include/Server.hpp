@@ -84,6 +84,13 @@ class Server {
         // [ROLE] : Gracefully stops the server loop and closes all open client sockets.
         void stop();
 
+        // [ROLE] : Flips the running flag only, without touching sockets or memory.
+        // [WHEN TO USE] : Called from the SIGINT/SIGQUIT handler. The real cleanup
+        //                 still happens in stop(), invoked afterwards from main()
+        //                 once poll() has returned and execution is back to normal
+        //                 (non-signal) flow.
+        void requestStop();
+
         // -----------------------------------------------------------------------------
         //                         Getters
         // -----------------------------------------------------------------------------
