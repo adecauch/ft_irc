@@ -152,7 +152,7 @@ void Client::clearOutputBuffer(size_t pos) {
 
 
 
-std::string Client::extractNextLine() {
+bool Client::extractNextLine(std::string& line) {
     // 1. Chercher la fin de ligne IRC standard (\r\n)
     size_t pos = this->_inputBuffer.find("\r\n");
     size_t delimiterLen = 2;
@@ -165,11 +165,11 @@ std::string Client::extractNextLine() {
 
     // Si aucun délimiteur n'est trouvé, la commande est incomplète dans le buffer
     if (pos == std::string::npos) {
-        return "";
+        return false;
     }
 
     // 2. Extraire la chaîne avant le délimiteur
-    std::string line = this->_inputBuffer.substr(0, pos);
+    line = this->_inputBuffer.substr(0, pos);
 
     // Supprimer le \r résiduel si jamais la ligne se terminait par \r\n et qu'on a matché sur \n
     if (!line.empty() && line[line.size() - 1] == '\r') {
@@ -179,8 +179,8 @@ std::string Client::extractNextLine() {
     // 3. Supprimer la ligne extraite + son délimiteur du _inputBuffer
     this->_inputBuffer.erase(0, pos + delimiterLen);
 
-    // 4. Renvoyer la commande prête à être parsée/exécutée
-    return line;
+    // 4. Ligne prête à être parsée/exécutée (peut être vide, et c'est valide)
+    return true;
 }
 
 // [ROLE] : Reports whether _outputBuffer still holds bytes awaiting send().

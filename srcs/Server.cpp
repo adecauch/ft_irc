@@ -176,7 +176,7 @@ bool Server::_readClientData(int fd) {
     // buffer, so fragmented sends (e.g. "com" + "man" + "d\n" via nc -C)
     // are recombined before being treated as a single command.
     std::string commandLine;
-    while (!(commandLine = client.extractNextLine()).empty()) {
+    while (client.extractNextLine(commandLine)) {
         std::cout << "[DEBUG] Commande reçue du FD " << fd
                   << " : \"" << commandLine << "\"" << std::endl;
 

@@ -62,6 +62,8 @@ Ce qui manque côté logique (le gros du travail) :
 
 **Fini quand** : le test `nc -C` du sujet (envoi de `com`, puis `man`, puis `d\n` séparément via Ctrl+D) est recollé en une seule commande avant traitement, sans plantage.
 
+**Vérifié** : fragmentation ✅, POLLOUT dynamique ✅, EAGAIN/EWOULDBLOCK ✅, déconnexion brutale d'un client sans impact sur les autres ✅. Bug corrigé : `extractNextLine()` renvoyait `""` à la fois pour "pas de ligne complète" et pour "ligne vide reçue", donc une commande arrivée juste après une ligne vide (même paquet) restait bloquée dans le buffer jusqu'au prochain événement réseau sur ce client. Signature changée en `bool extractNextLine(std::string&)`.
+
 ### Étape 3 — Parsing + dispatch générique (moyen)
 
 - [ ] Parser une ligne IRC : commande + liste de paramètres + paramètre "trailing" après `" :"`.

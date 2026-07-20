@@ -59,10 +59,16 @@ class Client {
         void clearInputBuffer(size_t pos);
         void clearOutputBuffer(size_t pos);
 
-        // [ROLE] : Extracts and returns the next complete line from _inputBuffer.
-        // [BEHAVIOR] : Finds '\r\n' (or '\n'), extracts the line without the delimiter,
-        //              removes it from _inputBuffer, and returns it. Returns "" if incomplete.
-        std::string extractNextLine();
+        // [ROLE] : Extracts the next complete line from _inputBuffer, if any.
+        // [BEHAVIOR] : Finds '\r\n' (or '\n'), removes it (and the delimiter) from
+        //              _inputBuffer, and writes it to line. Returns false when the
+        //              buffer holds no complete line yet (line is left untouched).
+        // [WHY] : A bool return keeps "nothing to extract yet" distinguishable from
+        //         "the client sent a genuinely empty line" — returning "" for both
+        //         would make the caller's loop stop on an empty line and leave
+        //         whatever comes right after it stuck in the buffer until more
+        //         data happens to arrive.
+        bool extractNextLine(std::string& line);
 
         // [ROLE] : Tells the Server whether this client still has bytes to send.
         // [WHEN TO USE] : Used to decide whether POLLOUT must stay active for this fd.
