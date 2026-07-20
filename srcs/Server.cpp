@@ -126,10 +126,13 @@ void Server::_acceptNewConnection() {
     // Retrieve client IP address string
     std::string ipHost = inet_ntoa(clientAddr.sin_addr);
 
-    // Register new socket to pollfd monitoring list
+    // Register new socket to pollfd monitoring list.
+    // POLLOUT is deliberately NOT set here: it is only armed once _outputBuffer
+    // actually has bytes to send (see sendToClient()), otherwise poll() would
+    // wake up on every loop iteration for a socket that has nothing to write.
     struct pollfd clientPollFd;
     clientPollFd.fd = clientFd;
-    clientPollFd.events = POLLIN | POLLOUT; // Monitor both reading and writing
+    clientPollFd.events = POLLIN;
     clientPollFd.revents = 0;
     this->_pollFds.push_back(clientPollFd);
 
@@ -142,30 +145,85 @@ void Server::_acceptNewConnection() {
 
 // [ROLE] : Reads data chunk from client socket and buffers it inside Client instance.
 // [WHEN TO USE] : Called when poll() triggers POLLIN on a client socket descriptor.
-void Server::_readClientData(int fd) {
+bool Server::_readClientData(int fd) {
     char buffer[1024];
     std::memset(buffer, 0, sizeof(buffer));
 
     ssize_t bytesRead = recv(fd, buffer, sizeof(buffer) - 1, 0);
 
-    if (bytesRead <= 0) {
-        if (bytesRead == 0) {
-            std::cout << "[INFO] Client FD " << fd << " disconnected." << std::endl;
-        } else {
-            std::cerr << "[ERROR] Recv failure on FD " << fd << std::endl;
+    if (bytesRead < 0) {
+        // A non-blocking socket reporting POLLIN can still race into EAGAIN;
+        // that is not an error, just nothing to read yet on this pass.
+        if (errno == EAGAIN || errno == EWOULDBLOCK) {
+            return true;
         }
+        std::cerr << "[ERROR] Recv failure on FD " << fd << std::endl;
         this->_disconnectClient(fd);
-    } else {
-        Client& client = this->_clients[fd];
-        client.appendInputBuffer(std::string(buffer, bytesRead));
+        return false;
+    }
 
-        // Boucle d'extraction : on traite TOUTES les lignes finissant par \r\n dans le buffer
-        std::string commandLine;
-        while (!(commandLine = client.extractNextLine()).empty()) {
-            std::cout << "[DEBUG] Commande reçue du FD " << fd 
-                      << " : \"" << commandLine << "\"" << std::endl;
-            
-            // C'est ici que le parser/exécuteur sera appelé à l'Étape 3 !
+    if (bytesRead == 0) {
+        // Peer performed an orderly shutdown (e.g. QUIT, closed terminal).
+        std::cout << "[INFO] Client FD " << fd << " disconnected." << std::endl;
+        this->_disconnectClient(fd);
+        return false;
+    }
+
+    Client& client = this->_clients[fd];
+    client.appendInputBuffer(std::string(buffer, bytesRead));
+
+    // Extraction loop: process every complete line already sitting in the
+    // buffer, so fragmented sends (e.g. "com" + "man" + "d\n" via nc -C)
+    // are recombined before being treated as a single command.
+    std::string commandLine;
+    while (!(commandLine = client.extractNextLine()).empty()) {
+        std::cout << "[DEBUG] Commande reçue du FD " << fd
+                  << " : \"" << commandLine << "\"" << std::endl;
+
+        // C'est ici que le parser/exécuteur sera appelé à l'Étape 3 !
+    }
+    return true;
+}
+
+// [ROLE] : Flushes queued bytes from a client's output buffer via send().
+// [WHEN TO USE] : Called when poll() triggers POLLOUT on a client socket descriptor.
+void Server::_writeClientData(int fd) {
+    std::map<int, Client>::iterator clientIt = this->_clients.find(fd);
+    if (clientIt == this->_clients.end()) {
+        return;
+    }
+    Client& client = clientIt->second;
+
+    if (!client.hasOutputData()) {
+        // Nothing left to write: stop polling for writability so the loop
+        // does not keep waking up for an event we no longer care about.
+        std::vector<struct pollfd>::iterator pollIt = this->_findPollFd(fd);
+        if (pollIt != this->_pollFds.end()) {
+            pollIt->events &= ~POLLOUT;
+        }
+        return;
+    }
+
+    const std::string& outputBuffer = client.getOutputBuffer();
+    ssize_t bytesSent = send(fd, outputBuffer.c_str(), outputBuffer.size(), 0);
+
+    if (bytesSent < 0) {
+        if (errno == EAGAIN || errno == EWOULDBLOCK) {
+            return; // Socket buffer full for now, retry on the next POLLOUT.
+        }
+        std::cerr << "[ERROR] Send failure on FD " << fd << std::endl;
+        this->_disconnectClient(fd);
+        return;
+    }
+
+    // Only the bytes the kernel actually accepted are removed: send() on a
+    // non-blocking socket may write less than the full buffer in one call.
+    client.clearOutputBuffer(static_cast<size_t>(bytesSent));
+
+    if (!client.hasOutputData()) {
+        std::vector<struct pollfd>::iterator pollIt = this->_findPollFd(fd);
+        if (pollIt != this->_pollFds.end()) {
+            pollIt->events &= ~POLLOUT;
         }
     }
 }
@@ -174,16 +232,23 @@ void Server::_readClientData(int fd) {
 void Server::_disconnectClient(int fd) {
     close(fd);
 
-    // Remove socket entry from pollfd array
-    for (std::vector<struct pollfd>::iterator it = this->_pollFds.begin(); it != this->_pollFds.end(); ++it) {
-        if (it->fd == fd) {
-            this->_pollFds.erase(it);
-            break;
-        }
+    std::vector<struct pollfd>::iterator pollIt = this->_findPollFd(fd);
+    if (pollIt != this->_pollFds.end()) {
+        this->_pollFds.erase(pollIt);
     }
 
     // Remove client entry from map registry
     this->_clients.erase(fd);
+}
+
+// [ROLE] : Locates the pollfd entry tracking a given socket fd.
+std::vector<struct pollfd>::iterator Server::_findPollFd(int fd) {
+    for (std::vector<struct pollfd>::iterator it = this->_pollFds.begin(); it != this->_pollFds.end(); ++it) {
+        if (it->fd == fd) {
+            return it;
+        }
+    }
+    return this->_pollFds.end();
 }
 
 
@@ -203,24 +268,71 @@ void Server::start() {
         int pollCount = poll(&this->_pollFds[0], this->_pollFds.size(), -1);
 
         if (pollCount < 0) {
-            if (this->_isRunning == false) {
-                break; // Graceful shutdown via signal interrupt
+            if (!this->_isRunning) {
+                break; // Graceful shutdown via signal interrupt (EINTR from Ctrl+C)
+            }
+            if (errno == EINTR) {
+                continue; // Interrupted by an unrelated signal, just poll again
             }
             throw std::runtime_error("Poll system call failure");
         }
 
-        // Iterate over monitored socket descriptors
+        // Iterate over monitored socket descriptors. Indices are re-checked
+        // rather than advanced whenever a client is disconnected mid-loop,
+        // because _disconnectClient() erases from _pollFds and shifts every
+        // following element one slot to the left.
         for (size_t i = 0; i < this->_pollFds.size(); ++i) {
-            if (this->_pollFds[i].revents & POLLIN) {
-                if (this->_pollFds[i].fd == this->_serverSocketFd) {
-                    // Event on master listening socket -> Accept new client
+            int fd = this->_pollFds[i].fd;
+            short revents = this->_pollFds[i].revents;
+
+            if (revents == 0) {
+                continue;
+            }
+
+            if (fd == this->_serverSocketFd) {
+                // Event on master listening socket -> Accept new client.
+                if (revents & POLLIN) {
                     this->_acceptNewConnection();
-                } else {
-                    // Event on established client socket -> Read incoming data
-                    this->_readClientData(this->_pollFds[i].fd);
+                }
+                continue;
+            }
+
+            // A hangup or error takes priority over anything else reported
+            // for this fd: the client is gone, do not touch it any further.
+            if (revents & (POLLHUP | POLLERR | POLLNVAL)) {
+                this->_disconnectClient(fd);
+                --i;
+                continue;
+            }
+
+            if (revents & POLLIN) {
+                if (!this->_readClientData(fd)) {
+                    --i; // fd was disconnected: _pollFds shifted, re-check index i
+                    continue;
                 }
             }
+
+            if (revents & POLLOUT) {
+                this->_writeClientData(fd);
+            }
         }
+    }
+}
+
+// [ROLE] : Queues a message in a client's output buffer and arms POLLOUT.
+// [WHEN TO USE] : The single entry point for command handlers to reply to a
+//                 client. The actual send() only ever happens inside the
+//                 poll() loop, via _writeClientData(), never here.
+void Server::sendToClient(int fd, const std::string& message) {
+    std::map<int, Client>::iterator clientIt = this->_clients.find(fd);
+    if (clientIt == this->_clients.end()) {
+        return;
+    }
+    clientIt->second.appendOutputBuffer(message);
+
+    std::vector<struct pollfd>::iterator pollIt = this->_findPollFd(fd);
+    if (pollIt != this->_pollFds.end()) {
+        pollIt->events |= POLLOUT;
     }
 }
 

@@ -182,3 +182,10 @@ std::string Client::extractNextLine() {
     // 4. Renvoyer la commande prête à être parsée/exécutée
     return line;
 }
+
+// [ROLE] : Reports whether _outputBuffer still holds bytes awaiting send().
+// [WHEN TO USE] : Called by Server after every write attempt to know whether
+//                 POLLOUT must remain active on this client's pollfd.
+bool Client::hasOutputData() const {
+    return !this->_outputBuffer.empty();
+}

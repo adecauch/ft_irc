@@ -2,7 +2,6 @@
 # define CLIENT_HPP
 
 # include <string>
-# include <iostream>
 
 class Client {
 
@@ -59,10 +58,15 @@ class Client {
         void appendOutputBuffer(const std::string& data);
         void clearInputBuffer(size_t pos);
         void clearOutputBuffer(size_t pos);
-		// [ROLE] : Extracts and returns the next complete line from _inputBuffer.
-    // [BEHAVIOR] : Finds '\r\n' (or '\n'), extracts the line without the delimiter,
-    //              removes it from _inputBuffer, and returns it. Returns "" if incomplete.
-    	std::string extractNextLine();
+
+        // [ROLE] : Extracts and returns the next complete line from _inputBuffer.
+        // [BEHAVIOR] : Finds '\r\n' (or '\n'), extracts the line without the delimiter,
+        //              removes it from _inputBuffer, and returns it. Returns "" if incomplete.
+        std::string extractNextLine();
+
+        // [ROLE] : Tells the Server whether this client still has bytes to send.
+        // [WHEN TO USE] : Used to decide whether POLLOUT must stay active for this fd.
+        bool hasOutputData() const;
 
 };
 

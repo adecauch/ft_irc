@@ -54,11 +54,11 @@ Ce qui manque côté logique (le gros du travail) :
 
 **Fini quand** : `./ircserv 6667 pass` tourne, accepte une connexion `nc 127.0.0.1 6667` sans planter, s'arrête proprement au `Ctrl+C`.
 
-### Étape 2 — Boucle réseau complète : lecture ET écriture (moyen)
+### Étape 2 — Boucle réseau complète : lecture ET écriture (moyen) ✅
 
-- [ ] Extraire les lignes complètes du buffer d'entrée (découpage sur `\r\n`), traiter chaque ligne une par une (`clearInputBuffer` est déjà prête pour ça).
-- [ ] Envoi réel des données : flush de `_outputBuffer` via `send()` déclenché sur `POLLOUT`. N'activer l'intérêt `POLLOUT` pour un fd que quand il a effectivement quelque chose à écrire, pour ne pas tourner à vide.
-- [ ] Gérer `POLLHUP`/`POLLERR` proprement (déconnexion).
+- [x] Extraire les lignes complètes du buffer d'entrée (découpage sur `\r\n`), traiter chaque ligne une par une (`clearInputBuffer` est déjà prête pour ça).
+- [x] Envoi réel des données : flush de `_outputBuffer` via `send()` déclenché sur `POLLOUT`. N'activer l'intérêt `POLLOUT` pour un fd que quand il a effectivement quelque chose à écrire, pour ne pas tourner à vide.
+- [x] Gérer `POLLHUP`/`POLLERR` proprement (déconnexion). (`POLLNVAL` couvert aussi, par défensivité.)
 
 **Fini quand** : le test `nc -C` du sujet (envoi de `com`, puis `man`, puis `d\n` séparément via Ctrl+D) est recollé en une seule commande avant traitement, sans plantage.
 

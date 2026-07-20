@@ -4,6 +4,9 @@
 # include <string>
 # include <vector>
 # include <map>
+# include <cerrno>
+# include <cstring>
+# include <stdexcept>
 # include <poll.h>
 # include <sys/socket.h>
 # include <netinet/in.h>
@@ -52,12 +55,27 @@ class Server {
         
         // [ROLE] : Accepts a new incoming connection and registers it in _pollFds and _clients.
         void _acceptNewConnection();
-        
+
         // [ROLE] : Reads raw incoming bytes from a client socket via recv().
-        void _readClientData(int fd);
-        
+        // [RETURN] : false if the client was disconnected during the call (fatal
+        //            recv() error or orderly shutdown), true otherwise. The caller
+        //            (start()) uses this to know its _pollFds indices just shifted.
+        bool _readClientData(int fd);
+
+        // [ROLE] : Flushes as much of a client's _outputBuffer as send() accepts.
+        // [WHEN TO USE] : Called by start() when poll() reports POLLOUT on a client fd.
+        // [BEHAVIOR] : Removes the sent bytes from _outputBuffer; once it is empty,
+        //              clears POLLOUT from that pollfd's events so poll() stops
+        //              waking up for writability it no longer needs to check.
+        void _writeClientData(int fd);
+
         // [ROLE] : Disconnects a client, closes its socket, and cleans up registry memory.
         void _disconnectClient(int fd);
+
+        // [ROLE] : Finds the pollfd entry tracking a given socket fd.
+        // [WHY] : Shared by every place that needs to flip POLLOUT on/off, so the
+        //         linear search over _pollFds lives in exactly one function.
+        std::vector<struct pollfd>::iterator _findPollFd(int fd);
 
     public:
         // -----------------------------------------------------------------------------
@@ -90,6 +108,13 @@ class Server {
         //                 once poll() has returned and execution is back to normal
         //                 (non-signal) flow.
         void requestStop();
+
+        // [ROLE] : Queues a message for a client and arms POLLOUT on its pollfd.
+        // [WHEN TO USE] : This is the single entry point command handlers use to
+        //                 reply to a client. Nothing is ever written with send()
+        //                 outside of the poll() loop (_writeClientData); this only
+        //                 buffers the bytes and signals interest in writability.
+        void sendToClient(int fd, const std::string& message);
 
         // -----------------------------------------------------------------------------
         //                         Getters
