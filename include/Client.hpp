@@ -59,6 +59,10 @@ class Client {
         void appendOutputBuffer(const std::string& data);
         void clearInputBuffer(size_t pos);
         void clearOutputBuffer(size_t pos);
+		// [ROLE] : Extracts and returns the next complete line from _inputBuffer.
+    // [BEHAVIOR] : Finds '\r\n' (or '\n'), extracts the line without the delimiter,
+    //              removes it from _inputBuffer, and returns it. Returns "" if incomplete.
+    	std::string extractNextLine();
 
 };
 

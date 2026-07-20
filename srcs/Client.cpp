@@ -149,3 +149,36 @@ void Client::clearInputBuffer(size_t pos) {
 void Client::clearOutputBuffer(size_t pos) {
     this->_outputBuffer.erase(0, pos);
 }
+
+
+
+std::string Client::extractNextLine() {
+    // 1. Chercher la fin de ligne IRC standard (\r\n)
+    size_t pos = this->_inputBuffer.find("\r\n");
+    size_t delimiterLen = 2;
+
+    // Tolérance : si un client ou nc envoie juste \n au lieu de \r\n
+    if (pos == std::string::npos) {
+        pos = this->_inputBuffer.find("\n");
+        delimiterLen = 1;
+    }
+
+    // Si aucun délimiteur n'est trouvé, la commande est incomplète dans le buffer
+    if (pos == std::string::npos) {
+        return "";
+    }
+
+    // 2. Extraire la chaîne avant le délimiteur
+    std::string line = this->_inputBuffer.substr(0, pos);
+
+    // Supprimer le \r résiduel si jamais la ligne se terminait par \r\n et qu'on a matché sur \n
+    if (!line.empty() && line[line.size() - 1] == '\r') {
+        line.erase(line.size() - 1);
+    }
+
+    // 3. Supprimer la ligne extraite + son délimiteur du _inputBuffer
+    this->_inputBuffer.erase(0, pos + delimiterLen);
+
+    // 4. Renvoyer la commande prête à être parsée/exécutée
+    return line;
+}

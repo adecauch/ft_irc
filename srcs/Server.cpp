@@ -149,16 +149,24 @@ void Server::_readClientData(int fd) {
     ssize_t bytesRead = recv(fd, buffer, sizeof(buffer) - 1, 0);
 
     if (bytesRead <= 0) {
-        // Connection closed by client or error occurred
         if (bytesRead == 0) {
-            std::cout << "[INFO] Client FD " << fd << " disconnected gracefully." << std::endl;
+            std::cout << "[INFO] Client FD " << fd << " disconnected." << std::endl;
         } else {
-            std::cerr << "[ERROR] Recv error on FD " << fd << std::endl;
+            std::cerr << "[ERROR] Recv failure on FD " << fd << std::endl;
         }
         this->_disconnectClient(fd);
     } else {
-        // Append raw received bytes to client input buffer
-        this->_clients[fd].appendInputBuffer(std::string(buffer, bytesRead));
+        Client& client = this->_clients[fd];
+        client.appendInputBuffer(std::string(buffer, bytesRead));
+
+        // Boucle d'extraction : on traite TOUTES les lignes finissant par \r\n dans le buffer
+        std::string commandLine;
+        while (!(commandLine = client.extractNextLine()).empty()) {
+            std::cout << "[DEBUG] Commande reçue du FD " << fd 
+                      << " : \"" << commandLine << "\"" << std::endl;
+            
+            // C'est ici que le parser/exécuteur sera appelé à l'Étape 3 !
+        }
     }
 }
 
