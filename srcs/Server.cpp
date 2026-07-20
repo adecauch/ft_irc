@@ -1,6 +1,7 @@
 #include "../include/Server.hpp"
 #include "../include/Parser.hpp"
 #include "../include/commands/commands.hpp"
+#include "../include/NumericReplies.hpp"
 
 /* ========================================================================== */
 /*                         ORTHODOX CANONICAL FORM                            */
@@ -189,7 +190,16 @@ bool Server::_readClientData(int fd) {
         }
         std::cout << std::endl;
 
-        // Le dispatch vers les handlers (et la réponse 421 pour CMD_UNKNOWN) viendra ensuite.
+        if (type == CMD_UNKNOWN) {
+            // A blank line (empty command) is not a command attempt at all —
+            // just protocol noise (keepalive, stray CRLF) — nothing to reply to.
+            if (!message.command.empty()) {
+                this->sendToClient(fd, ERR_UNKNOWNCOMMAND(client.getNickname(), message.command));
+            }
+            continue;
+        }
+
+        // Le dispatch vers un handler par commande arrive à l'Étape 4.
     }
     return true;
 }

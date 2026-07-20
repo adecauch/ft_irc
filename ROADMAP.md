@@ -64,13 +64,13 @@ Ce qui manque côté logique (le gros du travail) :
 
 **Vérifié** : fragmentation ✅, POLLOUT dynamique ✅, EAGAIN/EWOULDBLOCK ✅, déconnexion brutale d'un client sans impact sur les autres ✅. Bug corrigé : `extractNextLine()` renvoyait `""` à la fois pour "pas de ligne complète" et pour "ligne vide reçue", donc une commande arrivée juste après une ligne vide (même paquet) restait bloquée dans le buffer jusqu'au prochain événement réseau sur ce client. Signature changée en `bool extractNextLine(std::string&)`.
 
-### Étape 3 — Parsing + dispatch générique (moyen) — en cours
+### Étape 3 — Parsing + dispatch générique (moyen) ✅
 
 - [x] Parser une ligne IRC : commande + liste de paramètres + paramètre "trailing" après `" :"`. → `Parser::parse()` dans `include/Parser.hpp` / `srcs/Parser.cpp`, branché dans `Server::_readClientData` (log `[DEBUG]` en attendant le dispatch réel). Gère : params multiples, trailing (y compris vide), espaces multiples, préfixe `:nick` optionnel en tête de ligne, casse (commande normalisée en majuscules), et n'importe quel binaire/garbage sans planter.
 - [x] Brancher ce parsing sur l'enum de `commands.hpp`. → `resolveCommand()` déclarée dans `include/commands/commands.hpp`, implémentée dans `srcs/commands/commands.cpp` (table `{nom, enum}` + recherche linéaire, 17 entrées). Appelée juste après `Parser::parse()` dans `_readClientData`. Testé : les 17 commandes (casse mélangée) résolvent vers le bon ordinal, commande inconnue et ligne vide → `CMD_UNKNOWN`.
-- [ ] Répondre `421` (déjà défini) pour toute commande inconnue ; ne jamais planter sur une entrée absurde (ligne vide, commande sans paramètre, données binaires, flood...).
+- [x] Répondre `421` (déjà défini) pour toute commande inconnue ; ne jamais planter sur une entrée absurde (ligne vide, commande sans paramètre, données binaires, flood...). Ligne vide → aucune réponse (pas une vraie tentative de commande), commande inconnue non vide → `421` via `sendToClient` (jamais de `send()` direct).
 
-**Fini quand** : n'importe quelle ligne envoyée au serveur produit soit un traitement, soit une erreur propre — jamais un crash.
+**Fini quand** : n'importe quelle ligne envoyée au serveur produit soit un traitement, soit une erreur propre — jamais un crash. **Vérifié** : commande inconnue → 421 correct ; commande connue → pas de 421 ; ligne vide → silence ; flood de 5000 commandes d'un coup → 5000×421, serveur toujours vivant ; ligne de 5 Mo sans `\r\n` → pas de crash, connexion toujours utilisable ensuite.
 
 ### Étape 4 — Authentification & enregistrement (moyen)
 
