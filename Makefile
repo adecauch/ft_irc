@@ -22,12 +22,14 @@ NAME = ircserv
 
 SRCS =	srcs/main.cpp \
 		srcs/Client.cpp \
-		srcs/Server.cpp
+		srcs/Server.cpp \
+		srcs/Parser.cpp
 
 OBJS = $(SRCS:.cpp=.o)
 
 HEADERS =	include/Client.hpp \
 			include/Server.hpp \
+			include/Parser.hpp \
 			include/NumericReplies.hpp \
 			include/commands/commands.hpp
 

@@ -64,9 +64,9 @@ Ce qui manque côté logique (le gros du travail) :
 
 **Vérifié** : fragmentation ✅, POLLOUT dynamique ✅, EAGAIN/EWOULDBLOCK ✅, déconnexion brutale d'un client sans impact sur les autres ✅. Bug corrigé : `extractNextLine()` renvoyait `""` à la fois pour "pas de ligne complète" et pour "ligne vide reçue", donc une commande arrivée juste après une ligne vide (même paquet) restait bloquée dans le buffer jusqu'au prochain événement réseau sur ce client. Signature changée en `bool extractNextLine(std::string&)`.
 
-### Étape 3 — Parsing + dispatch générique (moyen)
+### Étape 3 — Parsing + dispatch générique (moyen) — en cours
 
-- [ ] Parser une ligne IRC : commande + liste de paramètres + paramètre "trailing" après `" :"`.
+- [x] Parser une ligne IRC : commande + liste de paramètres + paramètre "trailing" après `" :"`. → `Parser::parse()` dans `include/Parser.hpp` / `srcs/Parser.cpp`, branché dans `Server::_readClientData` (log `[DEBUG]` en attendant le dispatch réel). Gère : params multiples, trailing (y compris vide), espaces multiples, préfixe `:nick` optionnel en tête de ligne, casse (commande normalisée en majuscules), et n'importe quel binaire/garbage sans planter.
 - [ ] Brancher ce parsing sur l'enum de `commands.hpp`.
 - [ ] Répondre `421` (déjà défini) pour toute commande inconnue ; ne jamais planter sur une entrée absurde (ligne vide, commande sans paramètre, données binaires, flood...).
 

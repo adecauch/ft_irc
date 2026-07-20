@@ -1,4 +1,5 @@
 #include "../include/Server.hpp"
+#include "../include/Parser.hpp"
 
 /* ========================================================================== */
 /*                         ORTHODOX CANONICAL FORM                            */
@@ -177,10 +178,15 @@ bool Server::_readClientData(int fd) {
     // are recombined before being treated as a single command.
     std::string commandLine;
     while (client.extractNextLine(commandLine)) {
-        std::cout << "[DEBUG] Commande reçue du FD " << fd
-                  << " : \"" << commandLine << "\"" << std::endl;
+        IrcMessage message = Parser::parse(commandLine);
 
-        // C'est ici que le parser/exécuteur sera appelé à l'Étape 3 !
+        std::cout << "[DEBUG] FD " << fd << " command=\"" << message.command << "\"";
+        for (size_t p = 0; p < message.params.size(); ++p) {
+            std::cout << " params[" << p << "]=\"" << message.params[p] << "\"";
+        }
+        std::cout << std::endl;
+
+        // Le dispatch vers les handlers (et la réponse 421) viendra ensuite.
     }
     return true;
 }
