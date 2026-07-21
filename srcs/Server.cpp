@@ -254,7 +254,10 @@ bool Server::_processCommand(int fd, Client& client, const IrcMessage& message, 
         this->sendToClient(fd, ERR_NOTREGISTERED(client.getNickname()));
         return true;
     }
-
+	if (type == CMD_ENUM_PRIVMSG) {
+   		this->_handlePrivmsg(fd, client, message);
+    	return true;
+}
     // JOIN, PRIVMSG, TOPIC, KICK, INVITE, MODE, etc. plug in here in later steps.
     return true;
 }

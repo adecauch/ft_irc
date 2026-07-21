@@ -96,7 +96,11 @@ class Server {
         void _handlePass(int fd, Client& client, const IrcMessage& message);
         void _handleNick(int fd, Client& client, const IrcMessage& message);
         void _handleUser(int fd, Client& client, const IrcMessage& message);
+		void _handlePrivmsg(int fd, Client& client, const IrcMessage& message);
 
+		// Recherche un client par nickname (insensible à la casse), comme
+		// _isNicknameInUse mais renvoie le client trouvé plutôt qu'un bool.
+		Client* _findClientByNickname(const std::string& nickname);
         // [ROLE] : Case-insensitive nickname collision check against every other
         //          connected client (IRC nicknames are case-insensitive).
         // [WHY] : excludeFd lets a client keep/reclaim its own current nickname

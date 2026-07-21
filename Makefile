@@ -3,10 +3,10 @@
 #                                                         :::      ::::::::    #
 #    Makefile                                           :+:      :+:    :+:    #
 #                                                     +:+ +:+         +:+      #
-#    By: adecauch <adecauch@student.42.fr>          +#+  +:+       +#+         #
+#    By: ramahrez <rayenmahrez@student.42.f>        +#+  +:+       +#+         #
 #                                                 +#+#+#+#+#+   +#+            #
 #    Created: 2025/10/27 09:10:07 by adecauch          #+#    #+#              #
-#    Updated: 2026/07/20 19:03:37 by adecauch         ###   ########.fr        #
+#    Updated: 2026/07/22 00:55:58 by ramahrez         ###   ########.fr        #
 #                                                                              #
 # **************************************************************************** #
 
@@ -25,7 +25,9 @@ SRCS =	srcs/main.cpp \
 		srcs/Server.cpp \
 		srcs/Parser.cpp \
 		srcs/commands/commands.cpp \
-		srcs/commands/Registration.cpp
+		srcs/commands/Registration.cpp \
+		srcs/commands/Messaging.cpp
+
 
 OBJS = $(SRCS:.cpp=.o)
 
