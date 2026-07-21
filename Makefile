@@ -24,7 +24,8 @@ SRCS =	srcs/main.cpp \
 		srcs/Client.cpp \
 		srcs/Server.cpp \
 		srcs/Parser.cpp \
-		srcs/commands/commands.cpp
+		srcs/commands/commands.cpp \
+		srcs/commands/Registration.cpp
 
 OBJS = $(SRCS:.cpp=.o)
 

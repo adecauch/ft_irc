@@ -72,16 +72,18 @@ Ce qui manque côté logique (le gros du travail) :
 
 **Fini quand** : n'importe quelle ligne envoyée au serveur produit soit un traitement, soit une erreur propre — jamais un crash. **Vérifié** : commande inconnue → 421 correct ; commande connue → pas de 421 ; ligne vide → silence ; flood de 5000 commandes d'un coup → 5000×421, serveur toujours vivant ; ligne de 5 Mo sans `\r\n` → pas de crash, connexion toujours utilisable ensuite.
 
-### Étape 4 — Authentification & enregistrement (moyen)
+### Étape 4 — Authentification & enregistrement (moyen) ✅
 
-- [ ] `PASS` : vérifie le mot de passe passé en argument du programme (`464` si faux).
-- [ ] `NICK` : validation + unicité (`431`, `432`, `433`).
-- [ ] `USER` : enregistre username/realname (`462` si déjà enregistré).
-- [ ] Séquence complète PASS+NICK+USER → `001`-`004` (déjà écrits).
-- [ ] Toute commande envoyée avant enregistrement complet → `451`.
-- [ ] `QUIT` : ferme proprement la connexion.
+- [x] `PASS` : vérifie le mot de passe passé en argument du programme (`464` si faux, `461` si absent, `462` si déjà enregistré).
+- [x] `NICK` : validation format (lettre + jusqu'à 9 car., `432` sinon) + unicité insensible à la casse (`433`), `431` si absent.
+- [x] `USER` : enregistre username/realname (`461` si `<4` params, `462` si déjà enregistré). Les champs `<mode>`/`<unused>` sont ignorés, comme les vrais ircd.
+- [x] Séquence complète PASS+NICK+USER (peu importe l'ordre) → `001`-`004`, une seule fois, idempotent.
+- [x] Toute commande reconnue mais envoyée avant enregistrement complet → `451` (sauf `CAP`, volontairement ignorée en silence — Irssi l'envoie en tout premier).
+- [x] `QUIT` : ferme réellement la connexion (`close(fd)` via `_disconnectClient`), sans affecter les autres clients.
 
-**Fini quand** : le client de référence choisi arrive à se connecter, donner un nick et un username, et apparaît "connecté" côté serveur.
+Architecture : dispatch central `Server::_processCommand()` (switch sur l'enum) dans `srcs/Server.cpp`, handlers PASS/NICK/USER dans `srcs/commands/Registration.cpp` (nouveau, miroir de `commands.cpp`). Point d'attention géré : `_processCommand` renvoie `false` quand `QUIT` vient de fermer la socket, pour que `_readClientData` arrête immédiatement de toucher `client`/`_pollFds` (référence qui serait sinon dangling après l'`erase`).
+
+**Fini quand** : le client de référence choisi arrive à se connecter, donner un nick et un username, et apparaît "connecté" côté serveur. **Vérifié** (14 scénarios via script) : handshake complet → 001-004 ; mauvais mot de passe → jamais de welcome même avec NICK/USER après ; ordre NICK/USER avant PASS → complète quand même ; nick invalide/absent/déjà pris (y compris collision insensible à la casse) → 432/431/433 ; USER incomplet → 461 ; PASS/USER après enregistrement → 462 ; commande avant enregistrement → 451 ; CAP jamais d'erreur ; QUIT ferme vraiment la socket sans toucher aux autres clients ; deux clients s'enregistrent sans interférence ; garbage binaire pendant le handshake → pas de crash.
 
 ### Étape 5 — Messages privés (petit/moyen)
 

@@ -15,6 +15,8 @@
 # include <fcntl.h>
 # include <iostream>
 # include "Client.hpp"
+# include "Parser.hpp"
+# include "commands/commands.hpp"
 
 /* ========================================================================== */
 /*                             SERVER CLASS                                   */
@@ -46,6 +48,11 @@ class Server {
         // [WHY] : Provides fast O(log N) lookup to retrieve a client by its socket FD.
         std::map<int, Client>       _clients;
 
+        // [ROLE] : Human-readable timestamp captured once at startup.
+        // [WHY] : Fills RPL_CREATED (numeric 003) without touching <ctime> again
+        //         on every single client registration.
+        std::string                 _createdAt;
+
         // -----------------------------------------------------------------------------
         //                         Private Helper Functions
         // -----------------------------------------------------------------------------
@@ -76,6 +83,32 @@ class Server {
         // [WHY] : Shared by every place that needs to flip POLLOUT on/off, so the
         //         linear search over _pollFds lives in exactly one function.
         std::vector<struct pollfd>::iterator _findPollFd(int fd);
+
+        // [ROLE] : Central dispatch once a line has been parsed and identified.
+        //          PASS/NICK/USER/QUIT are handled directly; anything else is
+        //          gated on registration (451) until its own handler exists.
+        // [RETURN] : false if this call disconnected the client (QUIT) — the
+        //            caller (_readClientData) must stop touching it immediately.
+        bool _processCommand(int fd, Client& client, const IrcMessage& message, e_command type);
+
+        // [ROLE] : PASS / NICK / USER handlers — the registration handshake.
+        // [WHEN TO USE] : Called from _processCommand for their respective enum.
+        void _handlePass(int fd, Client& client, const IrcMessage& message);
+        void _handleNick(int fd, Client& client, const IrcMessage& message);
+        void _handleUser(int fd, Client& client, const IrcMessage& message);
+
+        // [ROLE] : Case-insensitive nickname collision check against every other
+        //          connected client (IRC nicknames are case-insensitive).
+        // [WHY] : excludeFd lets a client keep/reclaim its own current nickname
+        //         without tripping over itself.
+        bool _isNicknameInUse(const std::string& nickname, int excludeFd) const;
+
+        // [ROLE] : Sends 001-004 and flips isRegistered, but only once PASS, NICK
+        //          and USER have all succeeded.
+        // [WHEN TO USE] : Called after each of _handlePass/_handleNick/_handleUser
+        //                 succeeds; a no-op until every condition is met, and a
+        //                 no-op again afterwards (idempotent).
+        void _tryCompleteRegistration(int fd, Client& client);
 
     public:
         // -----------------------------------------------------------------------------

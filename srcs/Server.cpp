@@ -3,6 +3,8 @@
 #include "../include/commands/commands.hpp"
 #include "../include/NumericReplies.hpp"
 
+#include <ctime>
+
 /* ========================================================================== */
 /*                         ORTHODOX CANONICAL FORM                            */
 /* ========================================================================== */
@@ -28,6 +30,7 @@ Server& Server::operator=(const Server& rhs) {
         this->_isRunning = rhs._isRunning;
         this->_pollFds = rhs._pollFds;
         this->_clients = rhs._clients;
+        this->_createdAt = rhs._createdAt;
     }
     return *this;
 }
@@ -57,6 +60,15 @@ Server::Server(int port, const std::string& password)
 // [ROLE] : Creates, configures, binds, and listens on the main server socket.
 // [WHY] : SO_REUSEADDR allows instant server restarts. O_NONBLOCK prevents I/O stalling.
 void Server::_initServerSocket() {
+    // 0. Capture a human-readable startup timestamp for RPL_CREATED (003).
+    //    ctime() always appends a trailing '\n' — strip it, or it would break
+    //    out of the reply's own line framing once concatenated into it.
+    std::time_t now = std::time(NULL);
+    this->_createdAt = std::ctime(&now);
+    if (!this->_createdAt.empty() && this->_createdAt[this->_createdAt.size() - 1] == '\n') {
+        this->_createdAt.erase(this->_createdAt.size() - 1);
+    }
+
     // 1. Create IPv4 stream socket (TCP)
     this->_serverSocketFd = socket(AF_INET, SOCK_STREAM, 0);
     if (this->_serverSocketFd < 0) {
@@ -199,8 +211,51 @@ bool Server::_readClientData(int fd) {
             continue;
         }
 
-        // Le dispatch vers un handler par commande arrive à l'Étape 4.
+        if (!this->_processCommand(fd, client, message, type)) {
+            // The client was disconnected while processing this line (QUIT):
+            // `client` is now a dangling reference into an erased map entry,
+            // and _pollFds has shifted. Stop touching either immediately.
+            return false;
+        }
     }
+    return true;
+}
+
+// [ROLE] : Central switch once a line has been parsed and identified.
+// [WHY] : PASS/NICK/USER/QUIT need to work before registration completes (they
+//         *are* the registration handshake); everything else is gated on
+//         isRegistered here, once and for all, instead of in every future
+//         per-command handler.
+bool Server::_processCommand(int fd, Client& client, const IrcMessage& message, e_command type) {
+    switch (type) {
+        case CMD_ENUM_PASS:
+            this->_handlePass(fd, client, message);
+            return true;
+        case CMD_ENUM_NICK:
+            this->_handleNick(fd, client, message);
+            return true;
+        case CMD_ENUM_USER:
+            this->_handleUser(fd, client, message);
+            return true;
+        case CMD_ENUM_QUIT:
+            this->_disconnectClient(fd);
+            return false;
+        case CMD_ENUM_CAP:
+            // IRCv3 capability negotiation (Irssi sends "CAP LS" as its very
+            // first line). Not implemented — silently ignored so the handshake
+            // can proceed instead of confusing the client with a 451/421 for a
+            // message it sends before PASS/NICK/USER on purpose.
+            return true;
+        default:
+            break;
+    }
+
+    if (!client.getIsRegistered()) {
+        this->sendToClient(fd, ERR_NOTREGISTERED(client.getNickname()));
+        return true;
+    }
+
+    // JOIN, PRIVMSG, TOPIC, KICK, INVITE, MODE, etc. plug in here in later steps.
     return true;
 }
 
