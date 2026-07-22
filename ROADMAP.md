@@ -85,21 +85,25 @@ Architecture : dispatch central `Server::_processCommand()` (switch sur l'enum) 
 
 **Fini quand** : le client de référence choisi arrive à se connecter, donner un nick et un username, et apparaît "connecté" côté serveur. **Vérifié** (14 scénarios via script) : handshake complet → 001-004 ; mauvais mot de passe → jamais de welcome même avec NICK/USER après ; ordre NICK/USER avant PASS → complète quand même ; nick invalide/absent/déjà pris (y compris collision insensible à la casse) → 432/431/433 ; USER incomplet → 461 ; PASS/USER après enregistrement → 462 ; commande avant enregistrement → 451 ; CAP jamais d'erreur ; QUIT ferme vraiment la socket sans toucher aux autres clients ; deux clients s'enregistrent sans interférence ; garbage binaire pendant le handshake → pas de crash.
 
-### Étape 5 — Messages privés (petit/moyen)
+### Étape 5 — Messages privés (petit/moyen) ✅
 
-- [ ] `PRIVMSG <nick> :<message>` entre deux clients déjà connectés (pas besoin des channels pour ça, peut se faire avant l'étape 6).
-- [ ] Erreurs : cible absente (`401`), pas de destinataire (`411`), pas de texte (`412`).
+- [x] `PRIVMSG <nick> :<message>` entre deux clients déjà connectés (pas besoin des channels pour ça, peut se faire avant l'étape 6).
+- [x] Erreurs : cible absente (`401`), pas de destinataire (`411`), pas de texte (`412`).
 
 **Fini quand** : deux clients connectés en simultané peuvent se parler en privé.
 
-### Étape 6 — Classe `Channel` + `JOIN`/`PART`/`PRIVMSG` de channel (gros)
+**Vérifié** (script Python, `srcs/commands/Messaging.cpp`) : Alice → Bob livré tel quel (`:Alice PRIVMSG Bob :...`) ; nick inexistant → `401` ; pas de destinataire → `411` ; pas de texte → `412`.
 
-- [ ] Nouvelle classe `Channel` : nom, topic, membres, opérateurs, liste d'invités, modes (`i`, `t`, `k`, `l`), clé, limite d'utilisateurs.
-- [ ] `JOIN` : crée le channel s'il n'existe pas (créateur = opérateur), sinon ajoute le membre en respectant les restrictions déjà actives (`+i`, `+k`, `+l`), envoie `353`/`366`/topic courant, prévient les autres membres.
-- [ ] `PART` : quitte le channel, prévient les autres membres, supprime le channel s'il devient vide.
-- [ ] `PRIVMSG <#channel> :<message>` : diffusion à tous les membres sauf l'émetteur, erreurs `404`/`442` si non membre.
+### Étape 6 — Classe `Channel` + `JOIN`/`PART`/`PRIVMSG` de channel (gros) ✅
+
+- [x] Nouvelle classe `Channel` : nom, topic, membres, opérateurs, liste d'invités, modes (`i`, `t`, `k`, `l`), clé, limite d'utilisateurs. (`include/Channel.hpp` / `srcs/Channel.cpp`)
+- [x] `JOIN` : crée le channel s'il n'existe pas (créateur = opérateur), sinon ajoute le membre en respectant les restrictions déjà actives (`+i`, `+k`, `+l`), envoie `353`/`366`/topic courant, prévient les autres membres.
+- [x] `PART` : quitte le channel, prévient les autres membres, supprime le channel s'il devient vide.
+- [x] `PRIVMSG <#channel> :<message>` : diffusion à tous les membres sauf l'émetteur, erreurs `403`/`442` si channel/membre invalide (voir `audit.md` section 5.3 pour la justification du choix `403` plutôt que `404`, réservé à un futur mode d'écriture restreint).
 
 **Fini quand** : plusieurs clients peuvent rejoindre le même channel et discuter dedans.
+
+**Vérifié** (script Python, `srcs/commands/Channels.cpp`) : JOIN création (`@op` dans `353`, `331`/`366`) ; JOIN sur channel existant (nouveau membre sans `@`, broadcast `JOIN` aux membres déjà présents) ; PRIVMSG channel livré aux membres sauf l'émetteur, `442` pour un non-membre, `403` pour un channel inexistant ; PART broadcasté à tous y compris l'émetteur, channel détruit et recréé proprement (topic vide, nouvel opérateur unique) une fois vide ; `461` sur JOIN/PART sans argument ; `442`/`403` sur PART selon que le channel existe ; déconnexion brutale (fermeture socket sans QUIT) → fd retiré du channel sans crash, channel vide supprimé silencieusement ; ligne `JOIN` fragmentée recollée correctement ; flood de 500×`JOIN` sur un channel déjà rejoint → aucun broadcast dupliqué, serveur toujours vivant ; non-régression `421` sur commande inconnue.
 
 ### Étape 7 — Commandes opérateur (gros)
 

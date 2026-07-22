@@ -30,6 +30,7 @@ Server& Server::operator=(const Server& rhs) {
         this->_isRunning = rhs._isRunning;
         this->_pollFds = rhs._pollFds;
         this->_clients = rhs._clients;
+        this->_channels = rhs._channels;
         this->_createdAt = rhs._createdAt;
     }
     return *this;
@@ -254,10 +255,18 @@ bool Server::_processCommand(int fd, Client& client, const IrcMessage& message, 
         this->sendToClient(fd, ERR_NOTREGISTERED(client.getNickname()));
         return true;
     }
-	if (type == CMD_ENUM_PRIVMSG) {
-   		this->_handlePrivmsg(fd, client, message);
-    	return true;
-}
+    if (type == CMD_ENUM_PRIVMSG) {
+        this->_handlePrivmsg(fd, client, message);
+        return true;
+    }
+    if (type == CMD_ENUM_JOIN) {
+        this->_handleJoin(fd, client, message);
+        return true;
+    }
+    if (type == CMD_ENUM_PART) {
+        this->_handlePart(fd, client, message);
+        return true;
+    }
     // JOIN, PRIVMSG, TOPIC, KICK, INVITE, MODE, etc. plug in here in later steps.
     return true;
 }
@@ -307,6 +316,21 @@ void Server::_writeClientData(int fd) {
 
 // [ROLE] : Closes client socket and removes it from poll array and client map.
 void Server::_disconnectClient(int fd) {
+     // NOUVEAU : retirer le client de tous ses channels, prévenir les
+    // membres restants, purger les channels devenus vides.
+    for (std::map<std::string, Channel>::iterator it = this->_channels.begin();
+         it != this->_channels.end(); ) {
+        if (it->second.isMember(fd)) {
+            it->second.removeMember(fd);
+            it->second.removeOperator(fd);
+            // annoncer le départ aux membres restants si besoin
+        }
+        if (it->second.isEmpty()) {
+            this->_channels.erase(it++);   // pattern d'incrémentation avant erase — obligatoire en C++98
+        } else {
+            ++it;
+        }
+    }
     close(fd);
 
     std::vector<struct pollfd>::iterator pollIt = this->_findPollFd(fd);

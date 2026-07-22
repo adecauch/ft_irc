@@ -1,0 +1,196 @@
+#include "../include/Channel.hpp"
+
+/* ========================================================================== */
+/*                         ORTHODOX CANONICAL FORM                            */
+/* ========================================================================== */
+
+// [ROLE] : Default constructor. Only used as a placeholder value (e.g. map
+//          operator[] before assignment); never left registered as-is.
+Channel::Channel()
+    : _name(""),
+      _topic(""),
+      _hasTopic(false),
+      _inviteOnly(false),
+      _topicRestricted(false),
+      _hasKey(false),
+      _key(""),
+      _hasUserLimit(false),
+      _userLimit(0) {}
+
+// [ROLE] : Copy constructor.
+Channel::Channel(const Channel& src) {
+    *this = src;
+}
+
+// [ROLE] : Assignment operator.
+Channel& Channel::operator=(const Channel& rhs) {
+    if (this != &rhs) {
+        this->_name = rhs._name;
+        this->_topic = rhs._topic;
+        this->_hasTopic = rhs._hasTopic;
+        this->_members = rhs._members;
+        this->_operators = rhs._operators;
+        this->_invited = rhs._invited;
+        this->_inviteOnly = rhs._inviteOnly;
+        this->_topicRestricted = rhs._topicRestricted;
+        this->_hasKey = rhs._hasKey;
+        this->_key = rhs._key;
+        this->_hasUserLimit = rhs._hasUserLimit;
+        this->_userLimit = rhs._userLimit;
+    }
+    return *this;
+}
+
+// [ROLE] : Destructor. Nothing to release manually (only STL containers).
+Channel::~Channel() {}
+
+/* ========================================================================== */
+/*                         PARAMETERIZED CONSTRUCTOR                          */
+/* ========================================================================== */
+
+// [ROLE] : Constructs a brand-new channel from its name, as given by the
+//          client whose JOIN created it ("#foo").
+// [WHY] : Modes/topic all start at their default (disabled/empty) — a channel
+//         re-created after becoming empty must never inherit state from its
+//         previous life (see audit 7.4).
+Channel::Channel(const std::string& name)
+    : _name(name),
+      _topic(""),
+      _hasTopic(false),
+      _inviteOnly(false),
+      _topicRestricted(false),
+      _hasKey(false),
+      _key(""),
+      _hasUserLimit(false),
+      _userLimit(0) {}
+
+/* ========================================================================== */
+/*                         GETTERS & SETTERS                                  */
+/* ========================================================================== */
+
+const std::string& Channel::getName() const {
+    return this->_name;
+}
+
+bool Channel::isInviteOnly() const {
+    return this->_inviteOnly;
+}
+
+void Channel::setInviteOnly(bool v) {
+    this->_inviteOnly = v;
+}
+
+bool Channel::isTopicRestricted() const {
+    return this->_topicRestricted;
+}
+
+void Channel::setTopicRestricted(bool v) {
+    this->_topicRestricted = v;
+}
+
+bool Channel::hasKey() const {
+    return this->_hasKey;
+}
+
+const std::string& Channel::getKey() const {
+    return this->_key;
+}
+
+void Channel::setKey(const std::string& key) {
+    this->_key = key;
+    this->_hasKey = true;
+}
+
+void Channel::removeKey() {
+    this->_key.clear();
+    this->_hasKey = false;
+}
+
+bool Channel::hasUserLimit() const {
+    return this->_hasUserLimit;
+}
+
+size_t Channel::getUserLimit() const {
+    return this->_userLimit;
+}
+
+void Channel::setUserLimit(size_t limit) {
+    this->_userLimit = limit;
+    this->_hasUserLimit = true;
+}
+
+void Channel::removeUserLimit() {
+    this->_userLimit = 0;
+    this->_hasUserLimit = false;
+}
+
+/* ========================================================================== */
+/*                         MEMBER FUNCTIONS                                   */
+/* ========================================================================== */
+
+void Channel::addMember(int fd) {
+    this->_members.insert(fd);
+}
+
+// [WHY] : A std::set ignores a second insert/erase of the same fd, so callers
+//         never need to check isMember() first — safe to call unconditionally.
+void Channel::removeMember(int fd) {
+    this->_members.erase(fd);
+}
+
+bool Channel::isMember(int fd) const {
+    return this->_members.find(fd) != this->_members.end();
+}
+
+size_t Channel::memberCount() const {
+    return this->_members.size();
+}
+
+const std::set<int>& Channel::getMembers() const {
+    return this->_members;
+}
+
+bool Channel::isEmpty() const {
+    return this->_members.empty();
+}
+
+/* ========================================================================== */
+/*                         OPERATEURS                                         */
+/* ========================================================================== */
+
+void Channel::addOperator(int fd) {
+    this->_operators.insert(fd);
+}
+
+void Channel::removeOperator(int fd) {
+    this->_operators.erase(fd);
+}
+
+bool Channel::isOperator(int fd) const {
+    return this->_operators.find(fd) != this->_operators.end();
+}
+
+/* ========================================================================== */
+/*                         DIVERS (invite + topic)                            */
+/* ========================================================================== */
+
+void Channel::invite(int fd) {
+    this->_invited.insert(fd);
+}
+
+bool Channel::isInvited(int fd) const {
+    return this->_invited.find(fd) != this->_invited.end();
+}
+
+const std::string& Channel::getTopic() const {
+    return this->_topic;
+}
+
+bool Channel::hasTopic() const {
+    return this->_hasTopic;
+}
+
+void Channel::setTopic(const std::string& topic) {
+    this->_topic = topic;
+    this->_hasTopic = true;
+}

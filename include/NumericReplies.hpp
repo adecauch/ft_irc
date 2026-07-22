@@ -51,6 +51,7 @@
 // [WHEN TO USE] : When the target of PRIVMSG/INVITE/KICK does not exist.
 # define ERR_NOSUCHNICK(nick, target)   ("401 " + nick + " " + target + " :No such nick/channel\r\n")
 # define ERR_NOSUCHCHANNEL(nick, chan)  ("403 " + nick + " " + chan + " :No such channel\r\n")
+# define ERR_BADCHANMASK(nick, chan)    ("476 " + nick + " " + chan + " :Bad Channel Mask\r\n")
 # define ERR_CANNOTSENDTOCHAN(nick, chan) ("404 " + nick + " " + chan + " :Cannot send to channel\r\n")
 
 // [ROLE] : Invalid message syntax errors.

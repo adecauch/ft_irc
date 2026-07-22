@@ -17,6 +17,7 @@
 # include "Client.hpp"
 # include "Parser.hpp"
 # include "commands/commands.hpp"
+# include "Channel.hpp"
 
 /* ========================================================================== */
 /*                             SERVER CLASS                                   */
@@ -48,6 +49,8 @@ class Server {
         // [WHY] : Provides fast O(log N) lookup to retrieve a client by its socket FD.
         std::map<int, Client>       _clients;
 
+        // [ROLE] : Channel registry mapping channel name to Channel object instances.
+        std::map<std::string, Channel> _channels;
         // [ROLE] : Human-readable timestamp captured once at startup.
         // [WHY] : Fills RPL_CREATED (numeric 003) without touching <ctime> again
         //         on every single client registration.
@@ -96,11 +99,15 @@ class Server {
         void _handlePass(int fd, Client& client, const IrcMessage& message);
         void _handleNick(int fd, Client& client, const IrcMessage& message);
         void _handleUser(int fd, Client& client, const IrcMessage& message);
-		void _handlePrivmsg(int fd, Client& client, const IrcMessage& message);
+        void _handlePrivmsg(int fd, Client& client, const IrcMessage& message);
+        void _handleJoin(int fd, Client& client, const IrcMessage& message);
+        void _handlePart(int fd, Client& client, const IrcMessage& message);
 
-		// Recherche un client par nickname (insensible à la casse), comme
-		// _isNicknameInUse mais renvoie le client trouvé plutôt qu'un bool.
-		Client* _findClientByNickname(const std::string& nickname);
+        // Recherche un client par nickname (insensible à la casse), comme
+        // _isNicknameInUse mais renvoie le client trouvé plutôt qu'un bool.
+        Client* _findClientByNickname(const std::string& nickname);
+        Channel* _findChannel(const std::string& name);
+        void _broadcastToChannel(const Channel& channel, const std::string& message, int excludeFd);
         // [ROLE] : Case-insensitive nickname collision check against every other
         //          connected client (IRC nicknames are case-insensitive).
         // [WHY] : excludeFd lets a client keep/reclaim its own current nickname
