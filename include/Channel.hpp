@@ -70,11 +70,13 @@ class Channel {
         // Invités (+i)
         void        invite(int fd);
         bool        isInvited(int fd) const;
+        void        removeInvited(int fd);
 
         // Topic
         const std::string& getTopic() const;
         bool        hasTopic() const;
         void        setTopic(const std::string& topic);
+        void        clearTopic();
 };
 
 #endif

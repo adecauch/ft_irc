@@ -247,6 +247,16 @@ bool Server::_processCommand(int fd, Client& client, const IrcMessage& message, 
             // can proceed instead of confusing the client with a 451/421 for a
             // message it sends before PASS/NICK/USER on purpose.
             return true;
+        case CMD_ENUM_PING:
+            // Keepalive : le client attend un PONG portant le meme token. Traite
+            // ICI, avant la barriere isRegistered, car un client peut pinguer
+            // pendant le handshake et un PING ne doit jamais recevoir 451.
+            this->_handlePing(fd, message);
+            return true;
+        case CMD_ENUM_PONG:
+            // Reponse du client a un PING (eventuel) du serveur : rien a
+            // renvoyer, on l'accepte simplement sans tomber dans le gate 451.
+            return true;
         default:
             break;
     }
@@ -267,8 +277,34 @@ bool Server::_processCommand(int fd, Client& client, const IrcMessage& message, 
         this->_handlePart(fd, client, message);
         return true;
     }
-    // JOIN, PRIVMSG, TOPIC, KICK, INVITE, MODE, etc. plug in here in later steps.
+    if (type == CMD_ENUM_TOPIC) {
+        this->_handleTopic(fd, client, message);
+        return true;
+    }
+    if (type == CMD_ENUM_MODE) {
+        this->_handleMode(fd, client, message);
+        return true;
+    }
+    if (type == CMD_ENUM_KICK) {
+        this->_handleKick(fd, client, message);
+        return true;
+    }
+    if (type == CMD_ENUM_INVITE) {
+        this->_handleInvite(fd, client, message);
+        return true;
+    }
     return true;
+}
+
+// [ROLE] : PING <token> -> PONG ft_irc :<token>
+// [WHY] : Keepalive IRC. Un bout envoie periodiquement un PING portant un token ;
+//         l'autre doit renvoyer un PONG avec le MEME token, sinon la connexion
+//         est jugee morte et fermee sur timeout par le client. On renvoie le nom
+//         de serveur "ft_irc" (coherent avec les numeriques 002/004) suivi du
+//         token tel quel. Un PING sans token est gere sans planter (token vide).
+void Server::_handlePing(int fd, const IrcMessage& message) {
+    std::string token = message.params.empty() ? std::string() : message.params[0];
+    this->sendToClient(fd, "PONG ft_irc :" + token + "\r\n");
 }
 
 // [ROLE] : Flushes queued bytes from a client's output buffer via send().

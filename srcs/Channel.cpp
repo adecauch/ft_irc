@@ -182,6 +182,12 @@ bool Channel::isInvited(int fd) const {
     return this->_invited.find(fd) != this->_invited.end();
 }
 
+// [WHY] : Une invitation ne vaut que pour un seul JOIN — _handleJoin appelle
+//         ceci apres l'entree effective du client (no-op si non invite).
+void Channel::removeInvited(int fd) {
+    this->_invited.erase(fd);
+}
+
 const std::string& Channel::getTopic() const {
     return this->_topic;
 }
@@ -193,4 +199,12 @@ bool Channel::hasTopic() const {
 void Channel::setTopic(const std::string& topic) {
     this->_topic = topic;
     this->_hasTopic = true;
+}
+
+// [WHY] : "TOPIC #chan :" (empty topic argument) means "unset the topic", not
+//         "set it to an empty string" — this restores the _hasTopic == false
+//         state so a later JOIN reports 331 (no topic) rather than an empty 332.
+void Channel::clearTopic() {
+    this->_topic.clear();
+    this->_hasTopic = false;
 }

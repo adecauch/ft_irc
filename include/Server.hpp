@@ -99,9 +99,15 @@ class Server {
         void _handlePass(int fd, Client& client, const IrcMessage& message);
         void _handleNick(int fd, Client& client, const IrcMessage& message);
         void _handleUser(int fd, Client& client, const IrcMessage& message);
+        void _handlePing(int fd, const IrcMessage& message);
         void _handlePrivmsg(int fd, Client& client, const IrcMessage& message);
         void _handleJoin(int fd, Client& client, const IrcMessage& message);
         void _handlePart(int fd, Client& client, const IrcMessage& message);
+        void _handleTopic(int fd, Client& client, const IrcMessage& message);
+        void _handleMode(int fd, Client& client, const IrcMessage& message);
+        void _applyModeChanges(int fd, Client& client, Channel& channel, const IrcMessage& message);
+        void _handleKick(int fd, Client& client, const IrcMessage& message);
+        void _handleInvite(int fd, Client& client, const IrcMessage& message);
 
         // Recherche un client par nickname (insensible à la casse), comme
         // _isNicknameInUse mais renvoie le client trouvé plutôt qu'un bool.
