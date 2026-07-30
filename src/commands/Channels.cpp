@@ -1,3 +1,15 @@
+/* ************************************************************************** */
+/*                                                                            */
+/*                                                        :::      ::::::::   */
+/*   Channels.cpp                                       :+:      :+:    :+:   */
+/*                                                    +:+ +:+         +:+     */
+/*   By: adecauch <adecauch@student.42.fr>          +#+  +:+       +#+        */
+/*                                                +#+#+#+#+#+   +#+           */
+/*   Created: 2026/07/30 15:09:06 by adecauch          #+#    #+#             */
+/*   Updated: 2026/07/30 15:11:42 by adecauch         ###   ########.fr       */
+/*                                                                            */
+/* ************************************************************************** */
+
 #include "../../include/Server.hpp"
 #include "../../include/NumericReplies.hpp"
 
@@ -5,12 +17,7 @@
 #include <cstddef>
 #include <sstream>
 
-/* ========================================================================== */
-/*                      CHANNEL OPERATIONS                                    */
-/*                                                                            */
-/*  Methodes de Server, declarees dans include/Server.hpp, sorties ici pour   */
-/*  garder Server.cpp concentre sur le coeur reseau.                          */
-/* ========================================================================== */
+//CHANNEL OPERATIONS
 
 namespace {
 

@@ -1,6 +1,18 @@
+/* ************************************************************************** */
+/*                                                                            */
+/*                                                        :::      ::::::::   */
+/*   Server.cpp                                         :+:      :+:    :+:   */
+/*                                                    +:+ +:+         +:+     */
+/*   By: adecauch <adecauch@student.42.fr>          +#+  +:+       +#+        */
+/*                                                +#+#+#+#+#+   +#+           */
+/*   Created: 2026/07/30 15:06:01 by adecauch          #+#    #+#             */
+/*   Updated: 2026/07/30 15:07:51 by adecauch         ###   ########.fr       */
+/*                                                                            */
+/* ************************************************************************** */
+
 #include "../include/Server.hpp"
 #include "../include/Parser.hpp"
-#include "../include/commands/commands.hpp"
+#include "../include/commands.hpp"
 #include "../include/NumericReplies.hpp"
 
 #include <ctime>
@@ -16,10 +28,6 @@ const std::size_t MAX_PENDING_LINE = 8192;
 const std::size_t MAX_CLIENTS = 512;
 
 }
-
-/* ========================================================================== */
-/*                         ORTHODOX CANONICAL FORM                            */
-/* ========================================================================== */
 
 Server::Server()
     : _port(6667),
@@ -49,21 +57,11 @@ Server::~Server() {
     this->stop();
 }
 
-
-/* ========================================================================== */
-/*                         PARAMETERIZED CONSTRUCTOR                          */
-/* ========================================================================== */
-
 Server::Server(int port, const std::string& password)
     : _port(port),
       _password(password),
       _serverSocketFd(-1),
       _isRunning(false) {}
-
-
-/* ========================================================================== */
-/*                         PRIVATE NETWORK INITIALIZATION                      */
-/* ========================================================================== */
 
 // SO_REUSEADDR permet de relancer le serveur sans attendre la fin du TIME_WAIT,
 // O_NONBLOCK evite qu'un appel reseau ne fige tout le process.
@@ -120,11 +118,6 @@ void Server::_initServerSocket() {
     serverPollFd.revents = 0;
     this->_pollFds.push_back(serverPollFd);
 }
-
-
-/* ========================================================================== */
-/*                         EVENT HANDLING ROUTINES                             */
-/* ========================================================================== */
 
 // Appelee par start() quand poll() signale POLLIN sur la socket d'ecoute.
 void Server::_acceptNewConnection() {
@@ -411,11 +404,6 @@ std::vector<struct pollfd>::iterator Server::_findPollFd(int fd) {
     return this->_pollFds.end();
 }
 
-
-/* ========================================================================== */
-/*                         PUBLIC CORE METHODS                                */
-/* ========================================================================== */
-
 // Boucle principale, et unique poll() du projet.
 void Server::start() {
     this->_initServerSocket();
@@ -532,11 +520,6 @@ void Server::stop() {
     this->_pollFds.clear();
     std::cout << "[INFO] Server stopped successfully." << std::endl;
 }
-
-
-/* ========================================================================== */
-/*                               GETTERS                                      */
-/* ========================================================================== */
 
 int Server::getPort() const {
     return this->_port;

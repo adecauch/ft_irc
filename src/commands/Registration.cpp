@@ -1,15 +1,22 @@
+/* ************************************************************************** */
+/*                                                                            */
+/*                                                        :::      ::::::::   */
+/*   Registration.cpp                                   :+:      :+:    :+:   */
+/*                                                    +:+ +:+         +:+     */
+/*   By: adecauch <adecauch@student.42.fr>          +#+  +:+       +#+        */
+/*                                                +#+#+#+#+#+   +#+           */
+/*   Created: 2026/07/30 15:11:21 by adecauch          #+#    #+#             */
+/*   Updated: 2026/07/30 15:11:48 by adecauch         ###   ########.fr       */
+/*                                                                            */
+/* ************************************************************************** */
+
 #include "../../include/Server.hpp"
 #include "../../include/NumericReplies.hpp"
 
 #include <cctype>
 #include <cstddef>
 
-/* ========================================================================== */
-/*                      REGISTRATION HANDSHAKE: PASS / NICK / USER            */
-/*                                                                            */
-/*  Methodes de Server, declarees dans include/Server.hpp, sorties ici pour   */
-/*  garder Server.cpp concentre sur le coeur reseau.                          */
-/* ========================================================================== */
+//REGISTRATION HANDSHAKE: PASS / NICK / USER
 
 namespace {
 

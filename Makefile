@@ -6,7 +6,7 @@
 #    By: ramahrez <rayenmahrez@student.42.f>        +#+  +:+       +#+         #
 #                                                 +#+#+#+#+#+   +#+            #
 #    Created: 2025/10/27 09:10:07 by adecauch          #+#    #+#              #
-#    Updated: 2026/07/22 00:55:58 by ramahrez         ###   ########.fr        #
+#    Updated: 2026/07/30 14:45:31 by adecauch         ###   ########.fr        #
 #                                                                              #
 # **************************************************************************** #
 
@@ -20,15 +20,15 @@ CXXFLAGS = -Wall -Wextra -Werror -std=c++98 $(INC)
 
 NAME = ircserv
 
-SRCS =	srcs/main.cpp \
-		srcs/Client.cpp \
-		srcs/Channel.cpp \
-		srcs/Server.cpp \
-		srcs/Parser.cpp \
-		srcs/commands/commands.cpp \
-		srcs/commands/Registration.cpp \
-		srcs/commands/Messaging.cpp \
-		srcs/commands/Channels.cpp
+SRCS =	src/main.cpp \
+		src/Client.cpp \
+		src/Channel.cpp \
+		src/Server.cpp \
+		src/Parser.cpp \
+		src/commands/commands.cpp \
+		src/commands/Registration.cpp \
+		src/commands/Messaging.cpp \
+		src/commands/Channels.cpp
 
 
 OBJS = $(SRCS:.cpp=.o)
@@ -38,7 +38,7 @@ HEADERS =	include/Client.hpp \
 			include/Server.hpp \
 			include/Parser.hpp \
 			include/NumericReplies.hpp \
-			include/commands/commands.hpp
+			include/commands.hpp
 
 all: $(NAME)
 

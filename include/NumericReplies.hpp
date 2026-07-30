@@ -1,16 +1,19 @@
+/* ************************************************************************** */
+/*                                                                            */
+/*                                                        :::      ::::::::   */
+/*   NumericReplies.hpp                                 :+:      :+:    :+:   */
+/*                                                    +:+ +:+         +:+     */
+/*   By: adecauch <adecauch@student.42.fr>          +#+  +:+       +#+        */
+/*                                                +#+#+#+#+#+   +#+           */
+/*   Created: 2026/07/30 14:57:33 by adecauch          #+#    #+#             */
+/*   Updated: 2026/07/30 15:00:30 by adecauch         ###   ########.fr       */
+/*                                                                            */
+/* ************************************************************************** */
+
 #ifndef NUMERICREPLIES_HPP
 # define NUMERICREPLIES_HPP
 
-/* ========================================================================== */
-/*                     IRC NUMERIC REPLIES (RFC 1459)                         */
-/*                                                                            */
-/*  Reponses codees que le serveur RENVOIE aux clients. Chaque macro construit */
-/*  la ligne complete, \r\n inclus : l'appelant n'a jamais a y penser.         */
-/* ========================================================================== */
-
-// -----------------------------------------------------------------------------
-//  1. SUCCESS & HANDSHAKE RESPONSES (Codes 001 to 399)
-// -----------------------------------------------------------------------------
+//IRC NUMERIC REPLIES
 
 // Salve envoyee une seule fois, des que PASS + NICK + USER ont tous abouti.
 // Sans le 001, un client considere que la connexion a echoue.
@@ -34,10 +37,6 @@
 // Attend une liste deja concatenee, "@op1 membre2 ...".
 # define RPL_NAMREPLY(nick, chan, users) ("353 " + nick + " = " + chan + " :" + users + "\r\n")
 # define RPL_ENDOFNAMES(nick, chan)     ("366 " + nick + " " + chan + " :End of /NAMES list\r\n")
-
-// -----------------------------------------------------------------------------
-//  2. ERROR & REJECTION RESPONSES (Codes 400 to 599)
-// -----------------------------------------------------------------------------
 
 // Cible introuvable ou nom de channel invalide.
 # define ERR_NOSUCHNICK(nick, target)   ("401 " + nick + " " + target + " :No such nick/channel\r\n")

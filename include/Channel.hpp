@@ -1,3 +1,15 @@
+/* ************************************************************************** */
+/*                                                                            */
+/*                                                        :::      ::::::::   */
+/*   Channel.hpp                                        :+:      :+:    :+:   */
+/*                                                    +:+ +:+         +:+     */
+/*   By: adecauch <adecauch@student.42.fr>          +#+  +:+       +#+        */
+/*                                                +#+#+#+#+#+   +#+           */
+/*   Created: 2026/07/30 14:53:16 by adecauch          #+#    #+#             */
+/*   Updated: 2026/07/30 15:00:19 by adecauch         ###   ########.fr       */
+/*                                                                            */
+/* ************************************************************************** */
+
 # ifndef CHANNEL_HPP
 # define CHANNEL_HPP
 
@@ -23,18 +35,12 @@ class Channel {
         size_t            _userLimit;
 
     public:
-        // -----------------------------------------------------------------------------
-        //                         Orthodox Canonical Form
-        // -----------------------------------------------------------------------------
         Channel();
         Channel(const Channel& src);
         Channel(const std::string& name);
         Channel& operator=(const Channel& rhs);
         ~Channel();
 
-        // -----------------------------------------------------------------------------
-        //                         Getters & Setters
-        // -----------------------------------------------------------------------------
         const std::string& getName() const;
         bool        isInviteOnly() const;
         void        setInviteOnly(bool v);
@@ -48,9 +54,6 @@ class Channel {
         size_t      getUserLimit() const;
         void        setUserLimit(size_t limit);
         void        removeUserLimit();
-        // -----------------------------------------------------------------------------
-        //                         Member Functions
-        // -----------------------------------------------------------------------------
         // Un std::set ignore un second insert/erase du meme fd : les appelants
         // n'ont donc jamais besoin de tester isMember() avant.
         void        addMember(int fd);
@@ -59,16 +62,10 @@ class Channel {
         size_t      memberCount() const;
         const std::set<int>& getMembers() const;
         bool        isEmpty() const;
-        // -----------------------------------------------------------------------------
-        //                         Operateurs
-        // -----------------------------------------------------------------------------
         void        addOperator(int fd);
         void        removeOperator(int fd);
         bool        isOperator(int fd) const;
 
-        // -----------------------------------------------------------------------------
-        //                         Divers
-        // -----------------------------------------------------------------------------
         // Invités (+i). Une invitation ne vaut que pour un seul JOIN.
         void        invite(int fd);
         bool        isInvited(int fd) const;

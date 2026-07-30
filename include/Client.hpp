@@ -1,3 +1,15 @@
+/* ************************************************************************** */
+/*                                                                            */
+/*                                                        :::      ::::::::   */
+/*   Client.hpp                                         :+:      :+:    :+:   */
+/*                                                    +:+ +:+         +:+     */
+/*   By: adecauch <adecauch@student.42.fr>          +#+  +:+       +#+        */
+/*                                                +#+#+#+#+#+   +#+           */
+/*   Created: 2026/07/30 14:54:18 by adecauch          #+#    #+#             */
+/*   Updated: 2026/07/30 15:00:25 by adecauch         ###   ########.fr       */
+/*                                                                            */
+/* ************************************************************************** */
+
 #ifndef CLIENT_HPP
 # define CLIENT_HPP
 
@@ -23,22 +35,13 @@ class Client {
         bool        _skippingLine;
 
     public:
-        // -----------------------------------------------------------------------------
-        //                         Orthodox Canonical Form
-        // -----------------------------------------------------------------------------
         Client();
         Client(const Client& src);
         Client& operator=(const Client& rhs);
         ~Client();
 
-        // -----------------------------------------------------------------------------
-        //                         Parameterized Constructor
-        // -----------------------------------------------------------------------------
         Client(int fd, const std::string& hostname);
 
-        // -----------------------------------------------------------------------------
-        //                         Getters & Setters
-        // -----------------------------------------------------------------------------
         int                getFd() const;
         const std::string& getNickname() const;
 
@@ -59,9 +62,6 @@ class Client {
         void setHasGivenPassword(bool status);
         void setIsRegistered(bool status);
 
-        // -----------------------------------------------------------------------------
-        //                         Member Functions
-        // -----------------------------------------------------------------------------
         void appendInputBuffer(const std::string& data);
         void appendOutputBuffer(const std::string& data);
         void clearInputBuffer(size_t pos);

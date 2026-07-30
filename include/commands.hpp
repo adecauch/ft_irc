@@ -1,18 +1,22 @@
+/* ************************************************************************** */
+/*                                                                            */
+/*                                                        :::      ::::::::   */
+/*   commands.hpp                                       :+:      :+:    :+:   */
+/*                                                    +:+ +:+         +:+     */
+/*   By: adecauch <adecauch@student.42.fr>          +#+  +:+       +#+        */
+/*                                                +#+#+#+#+#+   +#+           */
+/*   Created: 2026/07/30 14:56:32 by adecauch          #+#    #+#             */
+/*   Updated: 2026/07/30 15:00:27 by adecauch         ###   ########.fr       */
+/*                                                                            */
+/* ************************************************************************** */
+
 #ifndef COMMANDS_HPP
 # define COMMANDS_HPP
 
 # include <string>
 
-/* ========================================================================== */
-/*                      IRC COMMAND IDENTIFIERS                               */
-/*                                                                            */
-/*  Centralise les noms de commandes et leurs valeurs d'enumeration, partages  */
-/*  par le parsing et l'execution.                                            */
-/* ========================================================================== */
+//IRC COMMAND IDENTIFIERS
 
-// -----------------------------------------------------------------------------
-//  1. STRING DEFINITIONS (IRC COMMAND STRINGS)
-// -----------------------------------------------------------------------------
 
 // Poignee de main et fin de session.
 # define CMD_PASS     "PASS"     // Sets or validates the server password
@@ -37,9 +41,6 @@
 # define CMD_WHO      "WHO"      // Queries information about matching users
 # define CMD_WHOIS    "WHOIS"    // Queries detailed user profile information
 
-// -----------------------------------------------------------------------------
-//  2. ENUM FOR LOGIC & EXECUTION ROUTING
-// -----------------------------------------------------------------------------
 
 // Une valeur par commande, pour pouvoir faire un switch au dispatch plutot que
 // d'eparpiller des comparaisons de chaines dans tout le code.
@@ -71,9 +72,6 @@ enum e_command
     CMD_ENUM_WHOIS
 };
 
-// -----------------------------------------------------------------------------
-//  3. STRING -> ENUM RESOLUTION
-// -----------------------------------------------------------------------------
 
 // Traduit un mot de commande deja en majuscules en sa valeur d'enumeration.
 // Renvoie CMD_UNKNOWN si le mot ne correspond a aucune commande connue.

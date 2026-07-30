@@ -1,3 +1,15 @@
+/* ************************************************************************** */
+/*                                                                            */
+/*                                                        :::      ::::::::   */
+/*   Server.hpp                                         :+:      :+:    :+:   */
+/*                                                    +:+ +:+         +:+     */
+/*   By: adecauch <adecauch@student.42.fr>          +#+  +:+       +#+        */
+/*                                                +#+#+#+#+#+   +#+           */
+/*   Created: 2026/07/30 15:00:01 by adecauch          #+#    #+#             */
+/*   Updated: 2026/07/30 15:00:34 by adecauch         ###   ########.fr       */
+/*                                                                            */
+/* ************************************************************************** */
+
 #ifndef SERVER_HPP
 # define SERVER_HPP
 
@@ -6,8 +18,6 @@
 # include <map>
 # include <set>
 # include <cstring>
-// Pas de <cerrno> : aucune decision du serveur ne repose sur errno, c'est
-// poll() seul qui dit quand accept/recv/send peuvent etre appeles.
 # include <stdexcept>
 # include <poll.h>
 # include <sys/socket.h>
@@ -18,15 +28,10 @@
 # include <iostream>
 # include "Client.hpp"
 # include "Parser.hpp"
-# include "commands/commands.hpp"
+# include "commands.hpp"
 # include "Channel.hpp"
 
-/* ========================================================================== */
-/*                             SERVER CLASS                                   */
-/*                                                                            */
-/*  Coeur reseau : socket d'ecoute, multiplexage par poll(), cycle de vie des */
-/*  clients et des channels, dispatch des commandes.                          */
-/* ========================================================================== */
+//SERVER CLASS
 
 class Server {
 
@@ -49,10 +54,6 @@ class Server {
 
         // Horodatage releve une seule fois au demarrage, pour RPL_CREATED (003).
         std::string                 _createdAt;
-
-        // -----------------------------------------------------------------------------
-        //                         Private Helper Functions
-        // -----------------------------------------------------------------------------
 
         // socket, setsockopt, fcntl, bind, listen, puis ajout a _pollFds.
         void _initServerSocket();
@@ -111,22 +112,11 @@ class Server {
         void _tryCompleteRegistration(int fd, Client& client);
 
     public:
-        // -----------------------------------------------------------------------------
-        //                         Orthodox Canonical Form
-        // -----------------------------------------------------------------------------
         Server();
         Server(const Server& src);
         Server& operator=(const Server& rhs);
         ~Server();
-
-        // -----------------------------------------------------------------------------
-        //                         Parameterized Constructor
-        // -----------------------------------------------------------------------------
         Server(int port, const std::string& password);
-
-        // -----------------------------------------------------------------------------
-        //                         Core Execution Methods
-        // -----------------------------------------------------------------------------
 
         // Ouvre la socket d'ecoute puis tourne dans la boucle poll().
         void start();
@@ -142,9 +132,6 @@ class Server {
         // Le send() reel n'a lieu que dans la boucle poll(), jamais ici.
         void sendToClient(int fd, const std::string& message);
 
-        // -----------------------------------------------------------------------------
-        //                         Getters
-        // -----------------------------------------------------------------------------
         int                getPort() const;
         const std::string& getPassword() const;
 };

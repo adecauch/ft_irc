@@ -1,8 +1,16 @@
-#include "../include/Client.hpp"
+/* ************************************************************************** */
+/*                                                                            */
+/*                                                        :::      ::::::::   */
+/*   Client.cpp                                         :+:      :+:    :+:   */
+/*                                                    +:+ +:+         +:+     */
+/*   By: adecauch <adecauch@student.42.fr>          +#+  +:+       +#+        */
+/*                                                +#+#+#+#+#+   +#+           */
+/*   Created: 2026/07/30 15:03:54 by adecauch          #+#    #+#             */
+/*   Updated: 2026/07/30 15:07:40 by adecauch         ###   ########.fr       */
+/*                                                                            */
+/* ************************************************************************** */
 
-/* ========================================================================== */
-/*                         ORTHODOX CANONICAL FORM                            */
-/* ========================================================================== */
+#include "../include/Client.hpp"
 
 // Le pseudo part a "*" : c'est ce que _tryCompleteRegistration teste pour savoir
 // si un NICK est deja passe.
@@ -40,11 +48,6 @@ Client& Client::operator=(const Client& rhs) {
 
 Client::~Client() {}
 
-
-/* ========================================================================== */
-/*                         PARAMETERIZED CONSTRUCTOR                          */
-/* ========================================================================== */
-
 // Appele des que Server accepte une connexion. Le hostname vient de l'adresse
 // reelle de la socket, jamais de ce que le client pretendra dans son USER.
 Client::Client(int fd, const std::string& hostname)
@@ -59,10 +62,6 @@ Client::Client(int fd, const std::string& hostname)
       _outputBuffer(""),
       _skippingLine(false) {}
 
-
-/* ========================================================================== */
-/*                             GETTERS & SETTERS                              */
-/* ========================================================================== */
 
 int Client::getFd() const {
     return this->_fd;
@@ -127,11 +126,6 @@ void Client::setIsRegistered(bool status) {
     this->_isRegistered = status;
 }
 
-
-/* ========================================================================== */
-/*                             MEMBER FUNCTIONS                               */
-/* ========================================================================== */
-
 // Empile les octets bruts sortis de recv(), sans rien interpreter.
 void Client::appendInputBuffer(const std::string& data) {
     this->_inputBuffer += data;
@@ -190,10 +184,6 @@ bool Client::extractNextLine(std::string& line) {
 bool Client::hasOutputData() const {
     return !this->_outputBuffer.empty();
 }
-
-/* ========================================================================== */
-/*              LIGNE TROP LONGUE : ABANDON PUIS RESYNCHRONISATION             */
-/* ========================================================================== */
 
 // Vider le buffer ne suffit pas : le reste de la ligne est encore en transit et
 // se collerait devant la commande suivante, d'ou le drapeau.

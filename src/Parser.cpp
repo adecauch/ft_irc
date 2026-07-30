@@ -1,10 +1,18 @@
+/* ************************************************************************** */
+/*                                                                            */
+/*                                                        :::      ::::::::   */
+/*   Parser.cpp                                         :+:      :+:    :+:   */
+/*                                                    +:+ +:+         +:+     */
+/*   By: adecauch <adecauch@student.42.fr>          +#+  +:+       +#+        */
+/*                                                +#+#+#+#+#+   +#+           */
+/*   Created: 2026/07/30 15:05:39 by adecauch          #+#    #+#             */
+/*   Updated: 2026/07/30 15:07:49 by adecauch         ###   ########.fr       */
+/*                                                                            */
+/* ************************************************************************** */
+
 #include "../include/Parser.hpp"
 
 #include <cctype>
-
-/* ========================================================================== */
-/*                             IRC MESSAGE PARSING                            */
-/* ========================================================================== */
 
 // Grammaire visee : [:prefixe] COMMANDE p1 p2 :dernier param avec des espaces.
 // Un ':' en tete d'un parametre en fait le dernier, espaces compris.

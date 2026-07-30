@@ -1,8 +1,16 @@
-#include "../include/Channel.hpp"
+/* ************************************************************************** */
+/*                                                                            */
+/*                                                        :::      ::::::::   */
+/*   Channel.cpp                                        :+:      :+:    :+:   */
+/*                                                    +:+ +:+         +:+     */
+/*   By: adecauch <adecauch@student.42.fr>          +#+  +:+       +#+        */
+/*                                                +#+#+#+#+#+   +#+           */
+/*   Created: 2026/07/30 15:03:03 by adecauch          #+#    #+#             */
+/*   Updated: 2026/07/30 15:07:38 by adecauch         ###   ########.fr       */
+/*                                                                            */
+/* ************************************************************************** */
 
-/* ========================================================================== */
-/*                         ORTHODOX CANONICAL FORM                            */
-/* ========================================================================== */
+#include "../include/Channel.hpp"
 
 // Simple valeur de remplissage (map operator[] avant affectation) : jamais
 // laissee telle quelle dans le registre des channels.
@@ -42,10 +50,6 @@ Channel& Channel::operator=(const Channel& rhs) {
 // Rien a liberer a la main : uniquement des conteneurs STL.
 Channel::~Channel() {}
 
-/* ========================================================================== */
-/*                         PARAMETERIZED CONSTRUCTOR                          */
-/* ========================================================================== */
-
 // Modes et sujet partent tous a leur valeur par defaut : un channel recree
 // apres etre devenu vide ne doit rien heriter de sa vie precedente.
 Channel::Channel(const std::string& name)
@@ -58,10 +62,6 @@ Channel::Channel(const std::string& name)
       _key(""),
       _hasUserLimit(false),
       _userLimit(0) {}
-
-/* ========================================================================== */
-/*                         GETTERS & SETTERS                                  */
-/* ========================================================================== */
 
 const std::string& Channel::getName() const {
     return this->_name;
@@ -119,10 +119,6 @@ void Channel::removeUserLimit() {
     this->_hasUserLimit = false;
 }
 
-/* ========================================================================== */
-/*                         MEMBER FUNCTIONS                                   */
-/* ========================================================================== */
-
 void Channel::addMember(int fd) {
     this->_members.insert(fd);
 }
@@ -147,10 +143,6 @@ bool Channel::isEmpty() const {
     return this->_members.empty();
 }
 
-/* ========================================================================== */
-/*                         OPERATEURS                                         */
-/* ========================================================================== */
-
 void Channel::addOperator(int fd) {
     this->_operators.insert(fd);
 }
@@ -162,10 +154,6 @@ void Channel::removeOperator(int fd) {
 bool Channel::isOperator(int fd) const {
     return this->_operators.find(fd) != this->_operators.end();
 }
-
-/* ========================================================================== */
-/*                         DIVERS (invite + topic)                            */
-/* ========================================================================== */
 
 void Channel::invite(int fd) {
     this->_invited.insert(fd);
