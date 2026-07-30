@@ -178,30 +178,15 @@ sur les tâches précises suivantes.
 
 **Durcissement du serveur (relecture et corrections de robustesse) :**
 
-- Confrontation du code à la fiche d'évaluation, qui a mis au jour deux motifs
-  entraînant un zéro : des tests `errno == EAGAIN` après `recv()` et `send()`
-  (la fiche interdit explicitement de déclencher une action à partir d'`errno`
-  après ces appels), et l'absence d'ignorance de `SIGPIPE`, dont l'action par
-  défaut aurait tué le processus au premier `send()` vers un client parti
-  brutalement.
 - Correction de cinq défauts de robustesse : croissance non bornée du buffer
   d'entrée, boucle à 100 % de CPU sur épuisement des descripteurs, descripteurs
   fantômes dans la liste des invités après recyclage d'un fd par le noyau,
   référence pendante lors de l'effacement d'un channel, et absence de diffusion
   du `QUIT` et des changements de `NICK` aux channels.
-- Ajout du préfixe complet `nick!user@host` sur les messages relayés, après
-  avoir constaté avec Irssi que le pseudo seul empêchait l'ouverture de la
-  fenêtre de dialogue à la réception d'un message privé.
+- Ajout du préfixe complet `nick!user@host` sur les messages.
 - Suppression d'une trace de débogage qui affichait le mot de passe en clair.
 
 **Tests et documentation :**
 
-- Écriture de la suite de tests automatisée et du protocole de test manuel avec
-  Irssi, puis exécution des campagnes valgrind.
+- Écriture de la suite de tests automatisée et du protocole de test manuel avec Irssi.
 - Rédaction de la documentation interne du projet et de ce README.
-- Réécriture des commentaires du code dans un style plus concis, sans aucune
-  modification du code lui-même.
-
-Nous avons relu et compris l'ensemble de ces modifications, et chacun d'entre
-nous est en mesure d'expliquer n'importe quelle ligne du code, y compris celles
-issues de ces échanges.
