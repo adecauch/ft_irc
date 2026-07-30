@@ -14,24 +14,20 @@
 
 namespace {
 
-// [ROLE] : Global pointer to the running server.
-// [WHY] : A signal handler can only be a plain function pointer (no context,
-//         no capture), so it needs some way to reach the running instance.
+// Un handler de signal est un simple pointeur de fonction, sans contexte : il
+// lui faut donc un global pour atteindre le serveur en cours.
 Server* g_server = NULL;
 
-// [ROLE] : Handler for SIGINT/SIGQUIT (Ctrl+C / Ctrl+\).
-// [WHY] : Only flips a flag (async-signal-safe). Server::stop() itself closes
-//         sockets and touches STL containers, which is not safe to run from
-//         inside a signal handler, so it stays out of this function entirely.
+// Ne fait que baisser un drapeau : seule chose sure dans un handler de signal.
+// Le vrai nettoyage a lieu dans Server::stop(), hors du handler.
 void handleShutdownSignal(int) {
     if (g_server) {
         g_server->requestStop();
     }
 }
 
-// [ROLE] : Parses and validates the port argument.
-// [WHY] : Must reject anything that isn't a plain positive integer in the
-//         valid TCP port range before it ever reaches socket()/bind().
+// Refuse tout ce qui n'est pas un entier dans la plage des ports TCP, avant que
+// la valeur n'atteigne socket()/bind().
 bool parsePort(const std::string& arg, int& port) {
     if (arg.empty() || arg.size() > 5) {
         return false;
@@ -73,6 +69,14 @@ int main(int argc, char** argv) {
     sa.sa_flags = 0;
     sigaction(SIGINT, &sa, NULL);
     sigaction(SIGQUIT, &sa, NULL);
+
+    // SIGPIPE doit etre ignore : son action par defaut est de TUER le process,
+    // donc un send() vers un client parti en RST suffirait a couper le serveur.
+    struct sigaction ignore;
+    ignore.sa_handler = SIG_IGN;
+    sigemptyset(&ignore.sa_mask);
+    ignore.sa_flags = 0;
+    sigaction(SIGPIPE, &ignore, NULL);
 
     try {
         server.start();

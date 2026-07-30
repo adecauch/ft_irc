@@ -4,8 +4,10 @@
 # include <string>
 # include <vector>
 # include <map>
-# include <cerrno>
+# include <set>
 # include <cstring>
+// Pas de <cerrno> : aucune decision du serveur ne repose sur errno, c'est
+// poll() seul qui dit quand accept/recv/send peuvent etre appeles.
 # include <stdexcept>
 # include <poll.h>
 # include <sys/socket.h>
@@ -22,80 +24,61 @@
 /* ========================================================================== */
 /*                             SERVER CLASS                                   */
 /*                                                                            */
-/*  Core network engine. Manages listening sockets, event multiplexing via   */
-/*  poll(), incoming client connections, and client lifecycle state.          */
+/*  Coeur reseau : socket d'ecoute, multiplexage par poll(), cycle de vie des */
+/*  clients et des channels, dispatch des commandes.                          */
 /* ========================================================================== */
 
 class Server {
 
     private:
-        // [ROLE] : Network configuration parameters passed as main() arguments.
         int                         _port;
         std::string                 _password;
-        
-        // [ROLE] : Master listening socket file descriptor.
-        // [WHY] : Set up during start(), listens continuously for incoming connections.
+
+        // Socket d'ecoute, toujours en premiere position de _pollFds.
         int                         _serverSocketFd;
-        
-        // [ROLE] : Server execution loop state flag.
-        // [WHY] : Turned to false when SIGINT/SIGQUIT (Ctrl+C) is caught to gracefully exit.
+
+        // Passe a false par le handler SIGINT/SIGQUIT pour sortir de la boucle.
         bool                        _isRunning;
 
-        // [ROLE] : Event monitoring array for poll().
-        // [WHY] : Stores socket FDs along with monitored events (POLLIN / POLLOUT).
+        // Tableau surveille par poll() : un pollfd par socket ouverte.
         std::vector<struct pollfd>  _pollFds;
 
-        // [ROLE] : Client registry mapping socket FD to Client object instances.
-        // [WHY] : Provides fast O(log N) lookup to retrieve a client by its socket FD.
+        // Registres indexes par fd (clients) et par nom (channels).
         std::map<int, Client>       _clients;
-
-        // [ROLE] : Channel registry mapping channel name to Channel object instances.
         std::map<std::string, Channel> _channels;
-        // [ROLE] : Human-readable timestamp captured once at startup.
-        // [WHY] : Fills RPL_CREATED (numeric 003) without touching <ctime> again
-        //         on every single client registration.
+
+        // Horodatage releve une seule fois au demarrage, pour RPL_CREATED (003).
         std::string                 _createdAt;
 
         // -----------------------------------------------------------------------------
         //                         Private Helper Functions
         // -----------------------------------------------------------------------------
-        
-        // [ROLE] : Initializes the master socket (socket, setsockopt, bind, listen, fcntl).
+
+        // socket, setsockopt, fcntl, bind, listen, puis ajout a _pollFds.
         void _initServerSocket();
-        
-        // [ROLE] : Accepts a new incoming connection and registers it in _pollFds and _clients.
+
+        // accept() une connexion en attente et enregistre le nouveau client.
         void _acceptNewConnection();
 
-        // [ROLE] : Reads raw incoming bytes from a client socket via recv().
-        // [RETURN] : false if the client was disconnected during the call (fatal
-        //            recv() error or orderly shutdown), true otherwise. The caller
-        //            (start()) uses this to know its _pollFds indices just shifted.
+        // Lit les octets dispos, recolle les lignes completes et les execute.
+        // Renvoie false si le client a ete deconnecte pendant l'appel.
         bool _readClientData(int fd);
 
-        // [ROLE] : Flushes as much of a client's _outputBuffer as send() accepts.
-        // [WHEN TO USE] : Called by start() when poll() reports POLLOUT on a client fd.
-        // [BEHAVIOR] : Removes the sent bytes from _outputBuffer; once it is empty,
-        //              clears POLLOUT from that pollfd's events so poll() stops
-        //              waking up for writability it no longer needs to check.
+        // Envoie ce que send() accepte du buffer de sortie, desarme POLLOUT
+        // quand il est vide.
         void _writeClientData(int fd);
 
-        // [ROLE] : Disconnects a client, closes its socket, and cleans up registry memory.
-        void _disconnectClient(int fd);
+        // Point de sortie unique : diffuse un QUIT, nettoie les trois registres.
+        void _disconnectClient(int fd, const std::string& reason = "Client exited");
 
-        // [ROLE] : Finds the pollfd entry tracking a given socket fd.
-        // [WHY] : Shared by every place that needs to flip POLLOUT on/off, so the
-        //         linear search over _pollFds lives in exactly one function.
+        // Retrouve l'entree pollfd d'un fd donne.
         std::vector<struct pollfd>::iterator _findPollFd(int fd);
 
-        // [ROLE] : Central dispatch once a line has been parsed and identified.
-        //          PASS/NICK/USER/QUIT are handled directly; anything else is
-        //          gated on registration (451) until its own handler exists.
-        // [RETURN] : false if this call disconnected the client (QUIT) — the
-        //            caller (_readClientData) must stop touching it immediately.
+        // Aiguillage central. PASS/NICK/USER/QUIT/CAP/PING/PONG passent avant la
+        // barriere d'enregistrement ; tout le reste apres. false si QUIT a ferme.
         bool _processCommand(int fd, Client& client, const IrcMessage& message, e_command type);
 
-        // [ROLE] : PASS / NICK / USER handlers — the registration handshake.
-        // [WHEN TO USE] : Called from _processCommand for their respective enum.
+        // Handlers, un par commande, definis dans srcs/commands/.
         void _handlePass(int fd, Client& client, const IrcMessage& message);
         void _handleNick(int fd, Client& client, const IrcMessage& message);
         void _handleUser(int fd, Client& client, const IrcMessage& message);
@@ -109,22 +92,22 @@ class Server {
         void _handleKick(int fd, Client& client, const IrcMessage& message);
         void _handleInvite(int fd, Client& client, const IrcMessage& message);
 
-        // Recherche un client par nickname (insensible à la casse), comme
-        // _isNicknameInUse mais renvoie le client trouvé plutôt qu'un bool.
+        // Recherches insensibles a la casse dans les deux registres.
         Client* _findClientByNickname(const std::string& nickname);
         Channel* _findChannel(const std::string& name);
+
+        // Envoie a tous les membres d'un channel, sauf excludeFd (-1 = personne).
         void _broadcastToChannel(const Channel& channel, const std::string& message, int excludeFd);
-        // [ROLE] : Case-insensitive nickname collision check against every other
-        //          connected client (IRC nicknames are case-insensitive).
-        // [WHY] : excludeFd lets a client keep/reclaim its own current nickname
-        //         without tripping over itself.
+
+        // Envoie a tous ceux qui partagent un channel avec fd, une seule fois
+        // chacun. Pour QUIT et NICK, qui ne visent pas un channel precis.
+        void _broadcastToPeers(int fd, const std::string& message, bool includeSelf);
+
+        // Le pseudo est-il deja pris ? excludeFd laisse un client garder le sien.
         bool _isNicknameInUse(const std::string& nickname, int excludeFd) const;
 
-        // [ROLE] : Sends 001-004 and flips isRegistered, but only once PASS, NICK
-        //          and USER have all succeeded.
-        // [WHEN TO USE] : Called after each of _handlePass/_handleNick/_handleUser
-        //                 succeeds; a no-op until every condition is met, and a
-        //                 no-op again afterwards (idempotent).
+        // Envoie 001-004 et passe isRegistered a true, une seule fois, quand
+        // PASS + NICK + USER ont tous les trois abouti.
         void _tryCompleteRegistration(int fd, Client& client);
 
     public:
@@ -139,31 +122,24 @@ class Server {
         // -----------------------------------------------------------------------------
         //                         Parameterized Constructor
         // -----------------------------------------------------------------------------
-        // [ROLE] : Constructs the server using parsed port number and password.
         Server(int port, const std::string& password);
 
         // -----------------------------------------------------------------------------
         //                         Core Execution Methods
         // -----------------------------------------------------------------------------
-        
-        // [ROLE] : Bootstraps sockets and starts the main event loop with poll().
+
+        // Ouvre la socket d'ecoute puis tourne dans la boucle poll().
         void start();
-        
-        // [ROLE] : Gracefully stops the server loop and closes all open client sockets.
+
+        // Ferme toutes les sockets et vide les registres.
         void stop();
 
-        // [ROLE] : Flips the running flag only, without touching sockets or memory.
-        // [WHEN TO USE] : Called from the SIGINT/SIGQUIT handler. The real cleanup
-        //                 still happens in stop(), invoked afterwards from main()
-        //                 once poll() has returned and execution is back to normal
-        //                 (non-signal) flow.
+        // Ne fait que baisser le drapeau : seule chose sure dans un handler de
+        // signal, le vrai nettoyage a lieu plus tard dans stop().
         void requestStop();
 
-        // [ROLE] : Queues a message for a client and arms POLLOUT on its pollfd.
-        // [WHEN TO USE] : This is the single entry point command handlers use to
-        //                 reply to a client. Nothing is ever written with send()
-        //                 outside of the poll() loop (_writeClientData); this only
-        //                 buffers the bytes and signals interest in writability.
+        // Seule facon pour un handler de repondre : met en file et arme POLLOUT.
+        // Le send() reel n'a lieu que dans la boucle poll(), jamais ici.
         void sendToClient(int fd, const std::string& message);
 
         // -----------------------------------------------------------------------------

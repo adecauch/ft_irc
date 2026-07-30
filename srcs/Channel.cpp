@@ -4,8 +4,8 @@
 /*                         ORTHODOX CANONICAL FORM                            */
 /* ========================================================================== */
 
-// [ROLE] : Default constructor. Only used as a placeholder value (e.g. map
-//          operator[] before assignment); never left registered as-is.
+// Simple valeur de remplissage (map operator[] avant affectation) : jamais
+// laissee telle quelle dans le registre des channels.
 Channel::Channel()
     : _name(""),
       _topic(""),
@@ -17,12 +17,10 @@ Channel::Channel()
       _hasUserLimit(false),
       _userLimit(0) {}
 
-// [ROLE] : Copy constructor.
 Channel::Channel(const Channel& src) {
     *this = src;
 }
 
-// [ROLE] : Assignment operator.
 Channel& Channel::operator=(const Channel& rhs) {
     if (this != &rhs) {
         this->_name = rhs._name;
@@ -41,18 +39,15 @@ Channel& Channel::operator=(const Channel& rhs) {
     return *this;
 }
 
-// [ROLE] : Destructor. Nothing to release manually (only STL containers).
+// Rien a liberer a la main : uniquement des conteneurs STL.
 Channel::~Channel() {}
 
 /* ========================================================================== */
 /*                         PARAMETERIZED CONSTRUCTOR                          */
 /* ========================================================================== */
 
-// [ROLE] : Constructs a brand-new channel from its name, as given by the
-//          client whose JOIN created it ("#foo").
-// [WHY] : Modes/topic all start at their default (disabled/empty) — a channel
-//         re-created after becoming empty must never inherit state from its
-//         previous life (see audit 7.4).
+// Modes et sujet partent tous a leur valeur par defaut : un channel recree
+// apres etre devenu vide ne doit rien heriter de sa vie precedente.
 Channel::Channel(const std::string& name)
     : _name(name),
       _topic(""),
@@ -132,8 +127,6 @@ void Channel::addMember(int fd) {
     this->_members.insert(fd);
 }
 
-// [WHY] : A std::set ignores a second insert/erase of the same fd, so callers
-//         never need to check isMember() first — safe to call unconditionally.
 void Channel::removeMember(int fd) {
     this->_members.erase(fd);
 }
@@ -182,8 +175,8 @@ bool Channel::isInvited(int fd) const {
     return this->_invited.find(fd) != this->_invited.end();
 }
 
-// [WHY] : Une invitation ne vaut que pour un seul JOIN — _handleJoin appelle
-//         ceci apres l'entree effective du client (no-op si non invite).
+// Appelee apres l'entree effective du client : une invitation ne vaut que pour
+// un seul JOIN. No-op si le client n'etait pas invite.
 void Channel::removeInvited(int fd) {
     this->_invited.erase(fd);
 }
@@ -201,9 +194,8 @@ void Channel::setTopic(const std::string& topic) {
     this->_hasTopic = true;
 }
 
-// [WHY] : "TOPIC #chan :" (empty topic argument) means "unset the topic", not
-//         "set it to an empty string" — this restores the _hasTopic == false
-//         state so a later JOIN reports 331 (no topic) rather than an empty 332.
+// "TOPIC #chan :" veut dire "effacer", pas "mettre une chaine vide" : d'ou la
+// remise a false, qui fait repondre 331 a une relecture plutot qu'un 332 vide.
 void Channel::clearTopic() {
     this->_topic.clear();
     this->_hasTopic = false;

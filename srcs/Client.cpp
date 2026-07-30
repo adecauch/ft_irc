@@ -4,27 +4,24 @@
 /*                         ORTHODOX CANONICAL FORM                            */
 /* ========================================================================== */
 
-// [ROLE] : Default constructor.
-// [WHY] : Required by Orthodox Canonical Form. Initializes members to empty/safe defaults.
-Client::Client() 
-    : _fd(-1), 
-      _nickname("*"), 
-      _username(""), 
-      _hostname("127.0.0.1"), 
-      _realname(""), 
-      _hasGivenPassword(false), 
-      _isRegistered(false), 
-      _inputBuffer(""), 
-      _outputBuffer("") {}
+// Le pseudo part a "*" : c'est ce que _tryCompleteRegistration teste pour savoir
+// si un NICK est deja passe.
+Client::Client()
+    : _fd(-1),
+      _nickname("*"),
+      _username(""),
+      _hostname("127.0.0.1"),
+      _realname(""),
+      _hasGivenPassword(false),
+      _isRegistered(false),
+      _inputBuffer(""),
+      _outputBuffer(""),
+      _skippingLine(false) {}
 
-// [ROLE] : Copy constructor.
-// [WHY] : Performs deep copy of all client attributes.
 Client::Client(const Client& src) {
     *this = src;
 }
 
-// [ROLE] : Assignment operator.
-// [WHY] : Allows safe assignment between Client instances.
 Client& Client::operator=(const Client& rhs) {
     if (this != &rhs) {
         this->_fd = rhs._fd;
@@ -36,12 +33,11 @@ Client& Client::operator=(const Client& rhs) {
         this->_isRegistered = rhs._isRegistered;
         this->_inputBuffer = rhs._inputBuffer;
         this->_outputBuffer = rhs._outputBuffer;
+        this->_skippingLine = rhs._skippingLine;
     }
     return *this;
 }
 
-// [ROLE] : Destructor.
-// [WHY] : Cleans up instance state upon destruction.
 Client::~Client() {}
 
 
@@ -49,18 +45,19 @@ Client::~Client() {}
 /*                         PARAMETERIZED CONSTRUCTOR                          */
 /* ========================================================================== */
 
-// [ROLE] : Custom constructor bound to an active socket and host IP.
-// [WHEN TO USE] : Called immediately when Server accepts a new incoming connection.
-Client::Client(int fd, const std::string& hostname) 
-    : _fd(fd), 
-      _nickname("*"), 
-      _username(""), 
-      _hostname(hostname), 
-      _realname(""), 
-      _hasGivenPassword(false), 
-      _isRegistered(false), 
-      _inputBuffer(""), 
-      _outputBuffer("") {}
+// Appele des que Server accepte une connexion. Le hostname vient de l'adresse
+// reelle de la socket, jamais de ce que le client pretendra dans son USER.
+Client::Client(int fd, const std::string& hostname)
+    : _fd(fd),
+      _nickname("*"),
+      _username(""),
+      _hostname(hostname),
+      _realname(""),
+      _hasGivenPassword(false),
+      _isRegistered(false),
+      _inputBuffer(""),
+      _outputBuffer(""),
+      _skippingLine(false) {}
 
 
 /* ========================================================================== */
@@ -73,6 +70,13 @@ int Client::getFd() const {
 
 const std::string& Client::getNickname() const {
     return this->_nickname;
+}
+
+// Prefixe complet "nick!user@host". Sans le !user@host, Irssi ne sait pas que
+// l'expediteur est un utilisateur et n'ouvre pas de fenetre sur un prive.
+std::string Client::getPrefix() const {
+    const std::string& user = this->_username.empty() ? this->_nickname : this->_username;
+    return this->_nickname + "!" + user + "@" + this->_hostname;
 }
 
 const std::string& Client::getUsername() const {
@@ -128,30 +132,29 @@ void Client::setIsRegistered(bool status) {
 /*                             MEMBER FUNCTIONS                               */
 /* ========================================================================== */
 
-// [ROLE] : Appends raw data chunk read from socket recv() to client's input queue.
+// Empile les octets bruts sortis de recv(), sans rien interpreter.
 void Client::appendInputBuffer(const std::string& data) {
     this->_inputBuffer += data;
 }
 
-// [ROLE] : Appends outgoing formatted responses to client's send queue.
+// Met une reponse en file ; le send() reel aura lieu dans la boucle poll().
 void Client::appendOutputBuffer(const std::string& data) {
     this->_outputBuffer += data;
 }
 
-// [ROLE] : Truncates processed bytes from input buffer up to pos index.
-// [WHEN TO USE] : Called by the Parser after extracting a complete command line (\r\n).
 void Client::clearInputBuffer(size_t pos) {
     this->_inputBuffer.erase(0, pos);
 }
 
-// [ROLE] : Truncates sent bytes from output buffer up to pos index.
-// [WHEN TO USE] : Called after successful send()/write() system call.
+// Retire les octets que send() a reellement acceptes, pas plus.
 void Client::clearOutputBuffer(size_t pos) {
     this->_outputBuffer.erase(0, pos);
 }
 
 
 
+// Renvoie un bool et non la ligne, pour distinguer "pas encore de ligne
+// complete" (false) de "ligne recue, peut-etre vide" (true).
 bool Client::extractNextLine(std::string& line) {
     // 1. Chercher la fin de ligne IRC standard (\r\n)
     size_t pos = this->_inputBuffer.find("\r\n");
@@ -183,9 +186,39 @@ bool Client::extractNextLine(std::string& line) {
     return true;
 }
 
-// [ROLE] : Reports whether _outputBuffer still holds bytes awaiting send().
-// [WHEN TO USE] : Called by Server after every write attempt to know whether
-//                 POLLOUT must remain active on this client's pollfd.
+// Decide si POLLOUT doit rester arme sur ce client.
 bool Client::hasOutputData() const {
     return !this->_outputBuffer.empty();
+}
+
+/* ========================================================================== */
+/*              LIGNE TROP LONGUE : ABANDON PUIS RESYNCHRONISATION             */
+/* ========================================================================== */
+
+// Vider le buffer ne suffit pas : le reste de la ligne est encore en transit et
+// se collerait devant la commande suivante, d'ou le drapeau.
+void Client::markLineOversized() {
+    this->_inputBuffer.clear();
+    this->_skippingLine = true;
+}
+
+bool Client::isSkippingLine() const {
+    return this->_skippingLine;
+}
+
+// On cherche '\n' seul et non "\r\n" : c'est le caractere commun aux deux
+// conventions acceptees, donc le seul point de resynchronisation fiable.
+bool Client::resyncAfterOversizedLine() {
+    size_t pos = this->_inputBuffer.find('\n');
+
+    if (pos == std::string::npos) {
+        // Toujours au milieu de la ligne geante : on jette et on attend la suite.
+        this->_inputBuffer.clear();
+        return false;
+    }
+
+    // Fin de la ligne fautive trouvee : tout ce qui suit est de nouveau exploitable.
+    this->_inputBuffer.erase(0, pos + 1);
+    this->_skippingLine = false;
+    return true;
 }

@@ -6,18 +6,16 @@
 #include <sstream>
 
 /* ========================================================================== */
-/*                      CHANNEL OPERATIONS: JOIN / PART                       */
+/*                      CHANNEL OPERATIONS                                    */
 /*                                                                            */
-/*  Implements Server's channel-related private methods, declared in         */
-/*  include/Server.hpp — split out here purely to keep Server.cpp focused    */
-/*  on the network core, same convention as Registration.cpp/Messaging.cpp.  */
+/*  Methodes de Server, declarees dans include/Server.hpp, sorties ici pour   */
+/*  garder Server.cpp concentre sur le coeur reseau.                          */
 /* ========================================================================== */
 
 namespace {
 
-// Dupliquée depuis Registration.cpp/Messaging.cpp plutôt que partagée via un
-// header commun : décision volontaire de l'étape 6 pour ne pas toucher aux
-// fichiers existants (voir audit.md section 3).
+// Dupliquee depuis Registration.cpp/Messaging.cpp : choix de l'etape 6 pour ne
+// pas toucher aux fichiers existants pendant le travail a deux.
 bool equalsIgnoreCase(const std::string& a, const std::string& b) {
     if (a.size() != b.size()) {
         return false;
@@ -37,10 +35,8 @@ std::string sizeToString(std::size_t n) {
     return oss.str();
 }
 
-// [ROLE] : Valide et convertit l'argument d'un mode +l : un entier strictement
-//          positif uniquement.
-// [RETURN] : false (out inchange) sur chaine vide, non entierement numerique,
-//            valeur nulle, ou depassement (istringstream met alors failbit).
+// Valide l'argument d'un mode +l : un entier strictement positif uniquement.
+// Renvoie false (out intact) sur chaine vide, non numerique, nulle, ou trop grande.
 bool parsePositiveInt(const std::string& s, std::size_t& out) {
     if (s.empty()) {
         return false;
@@ -60,11 +56,8 @@ bool parsePositiveInt(const std::string& s, std::size_t& out) {
     return true;
 }
 
-// [ROLE] : Construit la representation "+modes [args]" des modes actifs d'un
-//          channel, pour RPL_CHANNELMODEIS (324).
-// [WHY] : La cle (+k) et la limite (+l) sont ajoutees en argument seulement si
-//         le mode correspondant est actif ; l'appelant ne montre ce 324 qu'aux
-//         membres (verifie en amont), donc exposer la cle ici est acceptable.
+// Construit "+modes [args]" pour RPL_CHANNELMODEIS (324), dans l'ordre i,t,k,l.
+// La cle et la limite n'apparaissent que si leur mode est actif.
 std::string buildModeString(const Channel& channel) {
     std::string modes = "+";
     std::string args;
@@ -87,11 +80,8 @@ std::string buildModeString(const Channel& channel) {
 
 }
 
-// [ROLE] : Recherche un channel par nom (insensible à la casse), sur le
-//          modèle exact de Server::_findClientByNickname.
-// [WHY] : La clé stockée dans _channels garde la casse du premier JOIN qui a
-//         créé le channel ; toute comparaison ultérieure doit donc être
-//         insensible à la casse plutôt que de normaliser la clé elle-même.
+// Recherche insensible a la casse : la cle stockee garde la casse du premier
+// JOIN qui a cree le channel.
 Channel* Server::_findChannel(const std::string& name) {
     for (std::map<std::string, Channel>::iterator it = this->_channels.begin();
          it != this->_channels.end(); ++it) {
@@ -102,10 +92,8 @@ Channel* Server::_findChannel(const std::string& name) {
     return NULL;
 }
 
-// [ROLE] : Envoie message à tous les membres de channel, sauf excludeFd.
-// [WHEN TO USE] : excludeFd = -1 (jamais un fd valide) pour JOIN/PART, où
-//                 l'émetteur doit aussi recevoir sa propre annonce ; le fd de
-//                 l'émetteur pour PRIVMSG, qui ne s'échoie pas à lui-même.
+// excludeFd = -1 (jamais un fd valide) quand l'emetteur doit aussi recevoir son
+// propre message ; son fd pour PRIVMSG, qui ne s'echoie pas a lui-meme.
 void Server::_broadcastToChannel(const Channel& channel, const std::string& message, int excludeFd) {
     const std::set<int>& members = channel.getMembers();
     for (std::set<int>::const_iterator it = members.begin(); it != members.end(); ++it) {
@@ -115,10 +103,33 @@ void Server::_broadcastToChannel(const Channel& channel, const std::string& mess
     }
 }
 
-// [ROLE] : JOIN <#channel>[,<#channel2>...] [<key>[,<key2>...]]
-// [WHY] : Ne traite que le premier channel/clé de la liste — le sujet
-//         n'exige pas le multi-JOIN ; garder la signature ouverte à cette
-//         extension plus tard reste possible sans la casser (audit 5.1).
+// Pour QUIT et NICK, qui concernent le client lui-meme et non un channel precis.
+// Le set dedoublonne : sinon qui partage deux channels recevrait le message deux fois.
+void Server::_broadcastToPeers(int fd, const std::string& message, bool includeSelf) {
+    std::set<int> recipients;
+
+    for (std::map<std::string, Channel>::const_iterator it = this->_channels.begin();
+         it != this->_channels.end(); ++it) {
+        if (!it->second.isMember(fd)) {
+            continue;
+        }
+        const std::set<int>& members = it->second.getMembers();
+        recipients.insert(members.begin(), members.end());
+    }
+
+    if (includeSelf) {
+        recipients.insert(fd);   // meme sans aucun channel en commun
+    } else {
+        recipients.erase(fd);
+    }
+
+    for (std::set<int>::const_iterator it = recipients.begin(); it != recipients.end(); ++it) {
+        this->sendToClient(*it, message);
+    }
+}
+
+// JOIN <#channel>[,<#chan2>...] [<key>[,<key2>...]]. Seuls le premier channel
+// et la premiere cle sont traites : le sujet n'exige pas le multi-JOIN.
 void Server::_handleJoin(int fd, Client& client, const IrcMessage& message) {
     if (message.params.empty()) {
         this->sendToClient(fd, ERR_NEEDMOREPARAMS(client.getNickname(), message.command));
@@ -146,16 +157,16 @@ void Server::_handleJoin(int fd, Client& client, const IrcMessage& message) {
     bool isNewChannel = (channel == NULL);
 
     if (isNewChannel) {
-        // Le channel n'existe pas encore : le créer, le créateur devient
-        // membre ET opérateur (roadmap section 2).
+        // Channel inexistant : on le cree, et son createur devient membre ET
+        // operateur.
         this->_channels[chanName] = Channel(chanName);
         channel = &this->_channels[chanName];
         channel->addMember(fd);
         channel->addOperator(fd);
     } else {
         if (channel->isMember(fd)) {
-            // Cas limite sans code d'erreur dédié en IRC : on ne fait rien,
-            // pas de re-broadcast, pas de doublon (audit 5.1 point 3).
+            // Pas de code d'erreur IRC pour ce cas : on ne fait rien, ni erreur
+            // ni rediffusion, donc un flood de JOIN ne produit aucun doublon.
             return;
         }
         if (channel->isInviteOnly() && !channel->isInvited(fd)) {
@@ -173,14 +184,12 @@ void Server::_handleJoin(int fd, Client& client, const IrcMessage& message) {
         channel->addMember(fd);
     }
 
-    // Une invitation en attente est consommée dès l'entrée : elle ne vaut que
-    // pour un seul JOIN (no-op si le client n'était pas invité, notamment le
-    // créateur d'un channel neuf).
+    // L'invitation est consommee des l'entree : elle ne vaut que pour un JOIN.
     channel->removeInvited(fd);
 
-    // JOIN s'envoie aussi à l'émetteur (contrairement à PRIVMSG) : c'est ce
-    // qui permet au client de référence d'ouvrir sa fenêtre de channel.
-    std::string joinMsg = ":" + client.getNickname() + " JOIN " + chanName + "\r\n";
+    // JOIN s'envoie aussi a l'emetteur (contrairement a PRIVMSG) : c'est ce qui
+    // fait ouvrir sa fenetre de channel cote client.
+    std::string joinMsg = ":" + client.getPrefix() + " JOIN " + chanName + "\r\n";
     this->_broadcastToChannel(*channel, joinMsg, -1);
 
     if (channel->hasTopic()) {
@@ -189,8 +198,7 @@ void Server::_handleJoin(int fd, Client& client, const IrcMessage& message) {
         this->sendToClient(fd, RPL_NOTOPIC(client.getNickname(), chanName));
     }
 
-    // RPL_NAMREPLY attend une liste déjà concaténée, "@op1 member2 ..."
-    // (NumericReplies.hpp ne le fait pas à notre place).
+    // RPL_NAMREPLY attend une liste deja concatenee, "@op1 membre2 ...".
     std::string names;
     const std::set<int>& members = channel->getMembers();
     for (std::set<int>::const_iterator it = members.begin(); it != members.end(); ++it) {
@@ -210,7 +218,7 @@ void Server::_handleJoin(int fd, Client& client, const IrcMessage& message) {
     this->sendToClient(fd, RPL_ENDOFNAMES(client.getNickname(), chanName));
 }
 
-// [ROLE] : PART <#channel>[,<#channel2>...] [:<raison>]
+// PART <#channel>[,<#channel2>...] [:<raison>]
 void Server::_handlePart(int fd, Client& client, const IrcMessage& message) {
     if (message.params.empty()) {
         this->sendToClient(fd, ERR_NEEDMOREPARAMS(client.getNickname(), message.command));
@@ -233,8 +241,8 @@ void Server::_handlePart(int fd, Client& client, const IrcMessage& message) {
         return;
     }
 
-    // PART s'envoie aussi à l'émetteur, même logique que JOIN.
-    std::string partMsg = ":" + client.getNickname() + " PART " + chanName;
+    // PART s'envoie aussi a l'emetteur, meme logique que JOIN.
+    std::string partMsg = ":" + client.getPrefix() + " PART " + chanName;
     if (message.params.size() > 1 && !message.params[1].empty()) {
         partMsg += " :" + message.params[1];
     }
@@ -243,21 +251,18 @@ void Server::_handlePart(int fd, Client& client, const IrcMessage& message) {
 
     channel->removeMember(fd);
     channel->removeOperator(fd);
+    channel->removeInvited(fd);
 
     if (channel->isEmpty()) {
-        // erase() par la clé exacte stockée (channel->getName()), pas par
-        // chanName qui peut différer de casse selon ce que le client a tapé.
-        this->_channels.erase(channel->getName());
+        // La cle est COPIEE : passer channel->getName() donnerait a erase() une
+        // reference vers une chaine membre de l'objet qu'il va detruire.
+        std::string storedKey = channel->getName();
+        this->_channels.erase(storedKey);
     }
 }
 
-// [ROLE] : TOPIC <#channel> [:<topic>]
-// [WHY] : Une seule commande, deux comportements. Avec le seul nom de channel
-//         (params.size() == 1) elle *lit* le topic (331/332). Dès qu'un
-//         argument topic est présent — même vide via "TOPIC #chan :" — elle
-//         l'*écrit* : une valeur non vide pose le topic, une valeur vide
-//         l'efface. C'est le parser qui permet cette distinction : "pas
-//         d'argument" donne 1 param, "argument vide" en donne 2 (le 2e vide).
+// TOPIC <#channel> [:<topic>]. Une commande, deux comportements : sans argument
+// topic elle LIT (331/332), avec un argument elle ECRIT (vide = effacer).
 void Server::_handleTopic(int fd, Client& client, const IrcMessage& message) {
     if (message.params.empty()) {
         this->sendToClient(fd, ERR_NEEDMOREPARAMS(client.getNickname(), message.command));
@@ -275,7 +280,7 @@ void Server::_handleTopic(int fd, Client& client, const IrcMessage& message) {
         return;
     }
 
-    // Aucun argument topic (params.size() == 1) → simple consultation.
+    // Aucun argument topic (params.size() == 1) -> simple consultation.
     if (message.params.size() < 2) {
         if (channel->hasTopic()) {
             this->sendToClient(fd, RPL_TOPIC(client.getNickname(), chanName, channel->getTopic()));
@@ -285,9 +290,8 @@ void Server::_handleTopic(int fd, Client& client, const IrcMessage& message) {
         return;
     }
 
-    // Un argument topic est fourni → écriture. Réservée aux opérateurs
-    // uniquement si le channel est en +t ; sinon n'importe quel membre peut
-    // le changer (RFC 2812).
+    // Ecriture reservee aux operateurs uniquement si le channel est en +t ;
+    // sinon n'importe quel membre peut changer le sujet (RFC 2812).
     if (channel->isTopicRestricted() && !channel->isOperator(fd)) {
         this->sendToClient(fd, ERR_CHANOPRIVSNEEDED(client.getNickname(), chanName));
         return;
@@ -300,19 +304,14 @@ void Server::_handleTopic(int fd, Client& client, const IrcMessage& message) {
         channel->setTopic(newTopic);
     }
 
-    // Diffusé à tous les membres, émetteur inclus (même logique que JOIN/PART),
-    // pour que chaque client rafraîchisse le titre du channel.
-    std::string topicMsg = ":" + client.getNickname() + " TOPIC " + chanName + " :" + newTopic + "\r\n";
+    // Diffuse a tous, emetteur inclus, pour que chaque client rafraichisse le
+    // titre du channel.
+    std::string topicMsg = ":" + client.getPrefix() + " TOPIC " + chanName + " :" + newTopic + "\r\n";
     this->_broadcastToChannel(*channel, topicMsg, -1);
 }
 
-// [ROLE] : MODE <#channel> [<modestring> [<arg>...]]
-// [WHY] : Sans modestring, c'est une consultation (324). Avec, c'est une
-//         modification reservee aux operateurs (482 sinon). Le sujet ne demande
-//         que les modes de channel : une cible qui n'est pas un channel (mode
-//         utilisateur, ex. "MODE <nick> +i" envoye par certains clients au
-//         demarrage) est ignoree en silence plutot que de generer une erreur
-//         parasite qui polluerait l'affichage du client de reference.
+// MODE <#channel> [<modestring> [<arg>...]]. Sans modestring c'est une
+// consultation (324) ; avec, une modification reservee aux operateurs (482).
 void Server::_handleMode(int fd, Client& client, const IrcMessage& message) {
     if (message.params.empty()) {
         this->sendToClient(fd, ERR_NEEDMOREPARAMS(client.getNickname(), message.command));
@@ -349,13 +348,8 @@ void Server::_handleMode(int fd, Client& client, const IrcMessage& message) {
     this->_applyModeChanges(fd, client, *channel, message);
 }
 
-// [ROLE] : Applique un modestring deja autorise (appelant a verifie op + membre).
-// [WHY] : Le modestring se lit de gauche a droite. Un '+'/'-' fixe le sens
-//         courant ; chaque lettre suivante s'applique dans ce sens. k/o/l
-//         consomment un argument (params[2], params[3], ... dans l'ordre) ;
-//         i/t n'en consomment pas. On accumule au passage la liste des
-//         changements REELLEMENT appliques pour ne diffuser au channel que
-//         ceux-la (un mode ignore/en erreur n'apparait pas dans l'echo).
+// Lit le modestring de gauche a droite : un '+'/'-' fixe le sens, k/o/l
+// consomment un argument dans l'ordre, i/t non. Seul ce qui a change est diffuse.
 void Server::_applyModeChanges(int fd, Client& client, Channel& channel, const IrcMessage& message) {
     const std::string& modestring = message.params[1];
     std::size_t argIndex = 2;                 // params[2..] = arguments des modes
@@ -392,9 +386,8 @@ void Server::_applyModeChanges(int fd, Client& client, Channel& channel, const I
                     ++argIndex;
                     applied = true;
                 } else {
-                    // -k : la RFC passe la cle en argument ; on la consomme si
-                    // elle est presente (valeur ignoree) pour ne pas decaler les
-                    // arguments suivants, mais le retrait a lieu dans tous les cas.
+                    // -k : on consomme la cle si elle est presente, pour ne pas
+                    // decaler les arguments suivants. Le retrait a lieu quand meme.
                     if (argIndex < message.params.size()) {
                         ++argIndex;
                     }
@@ -444,8 +437,7 @@ void Server::_applyModeChanges(int fd, Client& client, Channel& channel, const I
                 break;
             }
             default:
-                // Mode non supporte (ex. 'b' liste de bans envoyee par un client)
-                // : ignore, jamais de crash. Hors perimetre du sujet.
+                // Mode non supporte (ex. 'b') : ignore, jamais de crash.
                 break;
         }
 
@@ -466,7 +458,7 @@ void Server::_applyModeChanges(int fd, Client& client, Channel& channel, const I
         return; // rien n'a change (tout ignore/en erreur) -> pas de diffusion
     }
 
-    std::string modeMsg = ":" + client.getNickname() + " MODE " + channel.getName() + " " + appliedModes;
+    std::string modeMsg = ":" + client.getPrefix() + " MODE " + channel.getName() + " " + appliedModes;
     for (std::size_t i = 0; i < appliedArgs.size(); ++i) {
         modeMsg += " " + appliedArgs[i];
     }
@@ -474,12 +466,8 @@ void Server::_applyModeChanges(int fd, Client& client, Channel& channel, const I
     this->_broadcastToChannel(channel, modeMsg, -1);
 }
 
-// [ROLE] : KICK <#channel> <user> [:<comment>]
-// [WHY] : Ejection d'un membre par un operateur. Comme JOIN/PART, seul le
-//         premier channel/pseudo avant une virgule est traite (pas de
-//         multi-KICK, hors perimetre). Le message est diffuse a tous AVANT le
-//         retrait effectif, pour que le client kicke recoive bien sa propre
-//         ejection (c'est ce KICK qui ferme sa fenetre de channel).
+// KICK <#channel> <user> [:<comment>]. Le message part AVANT le retrait, pour que
+// le client ejecte recoive sa propre ejection et ferme sa fenetre.
 void Server::_handleKick(int fd, Client& client, const IrcMessage& message) {
     if (message.params.size() < 2) {
         this->sendToClient(fd, ERR_NEEDMOREPARAMS(client.getNickname(), message.command));
@@ -518,30 +506,29 @@ void Server::_handleKick(int fd, Client& client, const IrcMessage& message) {
         return;
     }
 
-    // Commentaire optionnel ; a defaut, le pseudo du kickeur (convention usuelle).
+    // Commentaire optionnel ; a defaut le pseudo du kickeur (convention usuelle).
     std::string comment = (message.params.size() > 2 && !message.params[2].empty())
                           ? message.params[2] : client.getNickname();
 
-    // Pseudo canonique du kicke (target->getNickname()), pas ce que le kickeur a
-    // tape : c'est ce que son propre client doit reconnaitre pour se retirer.
-    std::string kickMsg = ":" + client.getNickname() + " KICK " + chanName + " "
+    // Pseudo canonique du kicke, pas ce que le kickeur a tape : c'est celui-la que
+    // son propre client reconnaitra pour se retirer.
+    std::string kickMsg = ":" + client.getPrefix() + " KICK " + chanName + " "
                           + target->getNickname() + " :" + comment + "\r\n";
     this->_broadcastToChannel(*channel, kickMsg, -1);
 
     channel->removeMember(target->getFd());
     channel->removeOperator(target->getFd());
+    channel->removeInvited(target->getFd());
 
     if (channel->isEmpty()) {
-        // Meme logique que PART : clé exacte stockée, pas ce qui a été tapé.
-        this->_channels.erase(channel->getName());
+        // Meme logique que PART : cle exacte stockee et copiee avant l'erase.
+        std::string storedKey = channel->getName();
+        this->_channels.erase(storedKey);
     }
 }
 
-// [ROLE] : INVITE <nick> <#channel>
-// [WHY] : Attention, l'ordre des arguments est l'inverse de KICK (pseudo
-//         d'abord, channel ensuite — RFC 2812). Remplit la liste _invited que
-//         _handleJoin consulte deja sous +i, ce qui permet a l'invite de
-//         contourner l'invite-only le temps d'un JOIN.
+// INVITE <nick> <#channel>. Attention, l'ordre des arguments est l'INVERSE de
+// KICK (pseudo d'abord, channel ensuite) : c'est la RFC 2812.
 void Server::_handleInvite(int fd, Client& client, const IrcMessage& message) {
     if (message.params.size() < 2) {
         this->sendToClient(fd, ERR_NEEDMOREPARAMS(client.getNickname(), message.command));
@@ -581,7 +568,7 @@ void Server::_handleInvite(int fd, Client& client, const IrcMessage& message) {
 
     // 341 confirme a l'inviteur, puis l'invite recoit la notification standard.
     this->sendToClient(fd, RPL_INVITING(client.getNickname(), target->getNickname(), chanName));
-    std::string inviteMsg = ":" + client.getNickname() + " INVITE "
+    std::string inviteMsg = ":" + client.getPrefix() + " INVITE "
                             + target->getNickname() + " " + chanName + "\r\n";
     this->sendToClient(target->getFd(), inviteMsg);
 }

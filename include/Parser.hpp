@@ -7,16 +7,13 @@
 /* ========================================================================== */
 /*                             IRC MESSAGE PARSING                            */
 /*                                                                            */
-/*  Turns one raw line (already stripped of its \r\n by                      */
-/*  Client::extractNextLine) into a command word and an ordered list of      */
-/*  parameters. Purely mechanical: it does not know which commands exist —   */
-/*  that is the dispatcher's job, added on top of this.                      */
+/*  Decoupe une ligne brute (deja privee de son \r\n par                      */
+/*  Client::extractNextLine) en un mot de commande et une liste ordonnee de   */
+/*  parametres. Purement mecanique : ne sait pas quelles commandes existent.  */
 /* ========================================================================== */
 
-// [ROLE] : Result of parsing one IRC line.
-// [WHY] : The trailing parameter (after " :") is folded into the same params
-//         list as the "middle" ones — callers just want an ordered list of
-//         values, not the wire-level distinction between the two forms.
+// Resultat du parsing d'une ligne. Le parametre "trailing" (apres " :") est
+// range dans le meme params que les autres : l'appelant veut juste une liste.
 struct IrcMessage {
     std::string              command;
     std::vector<std::string> params;
@@ -24,15 +21,8 @@ struct IrcMessage {
 
 namespace Parser {
 
-    // [ROLE] : Parses one raw IRC line into a command + ordered parameter list.
-    // [BEHAVIOR] : Skips an optional leading ':prefix' (clients should not send
-    //              one, but the grammar allows it), uppercases the command word
-    //              for case-insensitive matching, splits "middle" params on
-    //              runs of spaces, and treats everything after a lone ':' as a
-    //              single trailing parameter that may itself contain spaces.
-    // [WHY] : Never throws and never crashes on malformed input — an empty or
-    //         garbage line just yields an empty command and/or params, which
-    //         is for the dispatcher to reject (421), not this function.
+    // Decoupe une ligne en commande (mise en majuscules) + parametres.
+    // Ne leve jamais d'exception : une ligne absurde donne juste un resultat vide.
     IrcMessage parse(const std::string& rawLine);
 
 }

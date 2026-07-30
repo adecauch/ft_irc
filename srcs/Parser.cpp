@@ -6,7 +6,8 @@
 /*                             IRC MESSAGE PARSING                            */
 /* ========================================================================== */
 
-// [ROLE] : Parses one raw IRC line into a command + ordered parameter list.
+// Grammaire visee : [:prefixe] COMMANDE p1 p2 :dernier param avec des espaces.
+// Un ':' en tete d'un parametre en fait le dernier, espaces compris.
 IrcMessage Parser::parse(const std::string& rawLine) {
     IrcMessage message;
     std::string line = rawLine;
@@ -17,8 +18,8 @@ IrcMessage Parser::parse(const std::string& rawLine) {
     }
     line.erase(0, pos);
 
-    // Optional prefix: client-to-server messages should not carry one, but
-    // skip it gracefully rather than mistaking it for the command word.
+    // Un client ne devrait pas envoyer de prefixe, mais la grammaire l'autorise :
+    // on le saute plutot que de le prendre pour la commande.
     if (line[0] == ':') {
         std::string::size_type spacePos = line.find(' ');
         if (spacePos == std::string::npos) {
@@ -32,7 +33,7 @@ IrcMessage Parser::parse(const std::string& rawLine) {
         line.erase(0, pos);
     }
 
-    // Command word, normalized to uppercase (IRC commands are case-insensitive).
+    // Mise en majuscules : les commandes IRC sont insensibles a la casse.
     std::string::size_type spacePos = line.find(' ');
     message.command = line.substr(0, spacePos);
     for (std::string::size_type i = 0; i < message.command.size(); ++i) {
@@ -43,8 +44,6 @@ IrcMessage Parser::parse(const std::string& rawLine) {
     }
     line.erase(0, spacePos);
 
-    // Params: any number of space-separated "middle" tokens, optionally
-    // followed by a single ':'-prefixed trailing token that runs to the end.
     while (true) {
         pos = line.find_first_not_of(' ');
         if (pos == std::string::npos) {

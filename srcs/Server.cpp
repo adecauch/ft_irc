@@ -5,23 +5,32 @@
 
 #include <ctime>
 
+namespace {
+
+// Plafond d'octets acceptes pour UNE ligne pas encore terminee. Sans lui, un
+// client qui n'envoie jamais de \r\n ferait grossir _inputBuffer sans fin.
+const std::size_t MAX_PENDING_LINE = 8192;
+
+// Plafond de clients. Sans lui, un flood de connexions epuise les descripteurs
+// et accept() echoue en boucle alors que poll() resignale POLLIN : 100% de CPU.
+const std::size_t MAX_CLIENTS = 512;
+
+}
+
 /* ========================================================================== */
 /*                         ORTHODOX CANONICAL FORM                            */
 /* ========================================================================== */
 
-// [ROLE] : Default constructor.
-Server::Server() 
-    : _port(6667), 
-      _password(""), 
-      _serverSocketFd(-1), 
+Server::Server()
+    : _port(6667),
+      _password(""),
+      _serverSocketFd(-1),
       _isRunning(false) {}
 
-// [ROLE] : Copy constructor.
 Server::Server(const Server& src) {
     *this = src;
 }
 
-// [ROLE] : Assignment operator.
 Server& Server::operator=(const Server& rhs) {
     if (this != &rhs) {
         this->_port = rhs._port;
@@ -36,7 +45,6 @@ Server& Server::operator=(const Server& rhs) {
     return *this;
 }
 
-// [ROLE] : Destructor. Ensures cleanup of all resources upon object destruction.
 Server::~Server() {
     this->stop();
 }
@@ -46,11 +54,10 @@ Server::~Server() {
 /*                         PARAMETERIZED CONSTRUCTOR                          */
 /* ========================================================================== */
 
-// [ROLE] : Custom constructor bound to user-defined port and server password.
-Server::Server(int port, const std::string& password) 
-    : _port(port), 
-      _password(password), 
-      _serverSocketFd(-1), 
+Server::Server(int port, const std::string& password)
+    : _port(port),
+      _password(password),
+      _serverSocketFd(-1),
       _isRunning(false) {}
 
 
@@ -58,12 +65,11 @@ Server::Server(int port, const std::string& password)
 /*                         PRIVATE NETWORK INITIALIZATION                      */
 /* ========================================================================== */
 
-// [ROLE] : Creates, configures, binds, and listens on the main server socket.
-// [WHY] : SO_REUSEADDR allows instant server restarts. O_NONBLOCK prevents I/O stalling.
+// SO_REUSEADDR permet de relancer le serveur sans attendre la fin du TIME_WAIT,
+// O_NONBLOCK evite qu'un appel reseau ne fige tout le process.
 void Server::_initServerSocket() {
-    // 0. Capture a human-readable startup timestamp for RPL_CREATED (003).
-    //    ctime() always appends a trailing '\n' — strip it, or it would break
-    //    out of the reply's own line framing once concatenated into it.
+    // ctime() ajoute toujours un '\n' final : le laisser casserait le decoupage
+    // en lignes de la reponse 003 dans laquelle on le concatene.
     std::time_t now = std::time(NULL);
     this->_createdAt = std::ctime(&now);
     if (!this->_createdAt.empty() && this->_createdAt[this->_createdAt.size() - 1] == '\n') {
@@ -89,7 +95,7 @@ void Server::_initServerSocket() {
         throw std::runtime_error("Failed to set non-blocking mode on server socket");
     }
 
-    // 4. Bind socket to target IP and Port
+    // 4. Bind socket to target IP and Port. INADDR_ANY = toutes les interfaces.
     struct sockaddr_in serverAddr;
     std::memset(&serverAddr, 0, sizeof(serverAddr));
     serverAddr.sin_family = AF_INET;
@@ -107,7 +113,7 @@ void Server::_initServerSocket() {
         throw std::runtime_error("Failed to listen on server socket");
     }
 
-    // 6. Register master listening socket into poll monitoring array
+    // 6. La socket d'ecoute prend la premiere place de _pollFds, definitivement.
     struct pollfd serverPollFd;
     serverPollFd.fd = this->_serverSocketFd;
     serverPollFd.events = POLLIN; // Monitor incoming connection requests
@@ -120,15 +126,25 @@ void Server::_initServerSocket() {
 /*                         EVENT HANDLING ROUTINES                             */
 /* ========================================================================== */
 
-// [ROLE] : Accepts a new client connection attempt from the listening socket.
-// [WHEN TO USE] : Called by start() when POLLIN triggers on _serverSocketFd.
+// Appelee par start() quand poll() signale POLLIN sur la socket d'ecoute.
 void Server::_acceptNewConnection() {
     struct sockaddr_in clientAddr;
     socklen_t clientAddrLen = sizeof(clientAddr);
 
     int clientFd = accept(this->_serverSocketFd, (struct sockaddr*)&clientAddr, &clientAddrLen);
     if (clientFd < 0) {
+        // Pas de test d'errno ici non plus : poll() a signale POLLIN, donc une
+        // connexion attendait. Si accept() echoue, on n'en fait rien de plus.
         std::cerr << "[ERROR] Failed to accept client connection" << std::endl;
+        return;
+    }
+
+    // On accepte puis on ferme aussitot : ca vide le backlog, alors que refuser
+    // en laissant la connexion en attente ferait resignaler POLLIN sans fin.
+    if (this->_clients.size() >= MAX_CLIENTS) {
+        std::cerr << "[WARN] Client limit (" << MAX_CLIENTS
+                  << ") reached, connection refused" << std::endl;
+        close(clientFd);
         return;
     }
 
@@ -142,10 +158,9 @@ void Server::_acceptNewConnection() {
     // Retrieve client IP address string
     std::string ipHost = inet_ntoa(clientAddr.sin_addr);
 
-    // Register new socket to pollfd monitoring list.
-    // POLLOUT is deliberately NOT set here: it is only armed once _outputBuffer
-    // actually has bytes to send (see sendToClient()), otherwise poll() would
-    // wake up on every loop iteration for a socket that has nothing to write.
+    // POLLOUT n'est deliberement PAS arme ici : il ne l'est qu'une fois qu'il y a
+    // vraiment des octets a envoyer (voir sendToClient), sinon poll() reviendrait
+    // a chaque tour pour une socket qui n'a rien a ecrire.
     struct pollfd clientPollFd;
     clientPollFd.fd = clientFd;
     clientPollFd.events = POLLIN;
@@ -154,58 +169,53 @@ void Server::_acceptNewConnection() {
 
     // Instantiate and register new Client in map registry
     this->_clients.insert(std::make_pair(clientFd, Client(clientFd, ipHost)));
-    
-    std::cout << "[INFO] New connection accepted on FD " << clientFd 
+
+    std::cout << "[INFO] New connection accepted on FD " << clientFd
               << " from " << ipHost << std::endl;
 }
 
-// [ROLE] : Reads data chunk from client socket and buffers it inside Client instance.
-// [WHEN TO USE] : Called when poll() triggers POLLIN on a client socket descriptor.
+// Appelee quand poll() signale POLLIN sur une socket cliente.
+// Renvoie false si le client a ete deconnecte pendant l'appel.
 bool Server::_readClientData(int fd) {
-    char buffer[1024];
-    std::memset(buffer, 0, sizeof(buffer));
-
-    ssize_t bytesRead = recv(fd, buffer, sizeof(buffer) - 1, 0);
-
-    if (bytesRead < 0) {
-        // A non-blocking socket reporting POLLIN can still race into EAGAIN;
-        // that is not an error, just nothing to read yet on this pass.
-        if (errno == EAGAIN || errno == EWOULDBLOCK) {
-            return true;
-        }
-        std::cerr << "[ERROR] Recv failure on FD " << fd << std::endl;
+    // On passe par find() plutot que _clients[fd], qui creerait par defaut un
+    // Client fantome (fd -1) si les deux registres se desynchronisaient.
+    std::map<int, Client>::iterator clientIt = this->_clients.find(fd);
+    if (clientIt == this->_clients.end()) {
         this->_disconnectClient(fd);
         return false;
     }
+    Client& client = clientIt->second;
 
-    if (bytesRead == 0) {
-        // Peer performed an orderly shutdown (e.g. QUIT, closed terminal).
+    char buffer[1024];
+    ssize_t bytesRead = recv(fd, buffer, sizeof(buffer), 0);
+
+    // poll() a signale POLLIN : soit il y a des octets, soit le pair a ferme.
+    // 0 = fermeture propre, < 0 = vraie erreur -> on deconnecte dans les deux
+    // cas. errno n'est JAMAIS consulte, le sujet l'interdit.
+    if (bytesRead <= 0) {
         std::cout << "[INFO] Client FD " << fd << " disconnected." << std::endl;
         this->_disconnectClient(fd);
         return false;
     }
 
-    Client& client = this->_clients[fd];
     client.appendInputBuffer(std::string(buffer, bytesRead));
 
-    // Extraction loop: process every complete line already sitting in the
-    // buffer, so fragmented sends (e.g. "com" + "man" + "d\n" via nc -C)
-    // are recombined before being treated as a single command.
+    // Reste d'une ligne trop longue deja abandonnee : on l'ignore jusqu'a son
+    // saut de ligne, sinon elle se collerait devant la commande suivante.
+    if (client.isSkippingLine() && !client.resyncAfterOversizedLine()) {
+        return true; // fin de la ligne fautive pas encore vue
+    }
+
+    // TCP est un flux d'octets, pas de messages : on traite toutes les lignes
+    // completes disponibles, ce qui recolle au passage les envois fragmentes.
     std::string commandLine;
     while (client.extractNextLine(commandLine)) {
         IrcMessage message = Parser::parse(commandLine);
         e_command  type = resolveCommand(message.command);
 
-        std::cout << "[DEBUG] FD " << fd << " command=\"" << message.command
-                  << "\" type=" << type;
-        for (size_t p = 0; p < message.params.size(); ++p) {
-            std::cout << " params[" << p << "]=\"" << message.params[p] << "\"";
-        }
-        std::cout << std::endl;
-
         if (type == CMD_UNKNOWN) {
-            // A blank line (empty command) is not a command attempt at all —
-            // just protocol noise (keepalive, stray CRLF) — nothing to reply to.
+            // Une ligne vide n'est pas une tentative de commande, juste du bruit
+            // de protocole : rien a repondre.
             if (!message.command.empty()) {
                 this->sendToClient(fd, ERR_UNKNOWNCOMMAND(client.getNickname(), message.command));
             }
@@ -213,20 +223,26 @@ bool Server::_readClientData(int fd) {
         }
 
         if (!this->_processCommand(fd, client, message, type)) {
-            // The client was disconnected while processing this line (QUIT):
-            // `client` is now a dangling reference into an erased map entry,
-            // and _pollFds has shifted. Stop touching either immediately.
+            // QUIT vient de fermer : `client` est une reference pendante dans une
+            // entree effacee et _pollFds a bouge. On ne touche plus a rien.
             return false;
         }
+    }
+
+    // Ce qui reste est une ligne incomplete. Au-dela du plafond ce n'est plus un
+    // paquet fragmente legitime : on la jette et on arme la resynchronisation,
+    // pour n'envoyer qu'un seul 417 par ligne fautive.
+    if (client.getInputBuffer().size() > MAX_PENDING_LINE) {
+        std::cerr << "[WARN] FD " << fd << " pending line over "
+                  << MAX_PENDING_LINE << " bytes: line dropped" << std::endl;
+        client.markLineOversized();
+        this->sendToClient(fd, ERR_INPUTTOOLONG(client.getNickname()));
     }
     return true;
 }
 
-// [ROLE] : Central switch once a line has been parsed and identified.
-// [WHY] : PASS/NICK/USER/QUIT need to work before registration completes (they
-//         *are* the registration handshake); everything else is gated on
-//         isRegistered here, once and for all, instead of in every future
-//         per-command handler.
+// Aiguillage central. PASS/NICK/USER/QUIT/CAP/PING/PONG sont traites AVANT la
+// barriere isRegistered, qui filtre tout le reste une fois pour toutes.
 bool Server::_processCommand(int fd, Client& client, const IrcMessage& message, e_command type) {
     switch (type) {
         case CMD_ENUM_PASS:
@@ -238,24 +254,25 @@ bool Server::_processCommand(int fd, Client& client, const IrcMessage& message, 
         case CMD_ENUM_USER:
             this->_handleUser(fd, client, message);
             return true;
-        case CMD_ENUM_QUIT:
-            this->_disconnectClient(fd);
+        case CMD_ENUM_QUIT: {
+            // "QUIT :raison" -> la raison est reprise dans le QUIT diffuse aux
+            // channels ; "QUIT" tout court retombe sur le libelle par defaut.
+            std::string reason = message.params.empty() ? std::string("Client exited")
+                                                        : message.params[0];
+            this->_disconnectClient(fd, reason);
             return false;
+        }
         case CMD_ENUM_CAP:
-            // IRCv3 capability negotiation (Irssi sends "CAP LS" as its very
-            // first line). Not implemented — silently ignored so the handshake
-            // can proceed instead of confusing the client with a 451/421 for a
-            // message it sends before PASS/NICK/USER on purpose.
+            // Negociation IRCv3, qu'Irssi envoie en toute premiere ligne. Non
+            // implementee, ignoree en silence pour ne pas polluer son affichage.
             return true;
         case CMD_ENUM_PING:
-            // Keepalive : le client attend un PONG portant le meme token. Traite
-            // ICI, avant la barriere isRegistered, car un client peut pinguer
-            // pendant le handshake et un PING ne doit jamais recevoir 451.
+            // Traite ICI, avant la barriere : un client peut pinguer pendant la
+            // poignee de main, et un PING ne doit jamais recevoir 451.
             this->_handlePing(fd, message);
             return true;
         case CMD_ENUM_PONG:
-            // Reponse du client a un PING (eventuel) du serveur : rien a
-            // renvoyer, on l'accepte simplement sans tomber dans le gate 451.
+            // Reponse a un PING : rien a renvoyer, juste ne pas tomber sur 451.
             return true;
         default:
             break;
@@ -296,19 +313,14 @@ bool Server::_processCommand(int fd, Client& client, const IrcMessage& message, 
     return true;
 }
 
-// [ROLE] : PING <token> -> PONG ft_irc :<token>
-// [WHY] : Keepalive IRC. Un bout envoie periodiquement un PING portant un token ;
-//         l'autre doit renvoyer un PONG avec le MEME token, sinon la connexion
-//         est jugee morte et fermee sur timeout par le client. On renvoie le nom
-//         de serveur "ft_irc" (coherent avec les numeriques 002/004) suivi du
-//         token tel quel. Un PING sans token est gere sans planter (token vide).
+// PING <token> -> PONG ft_irc :<token>. Le token doit etre renvoye tel quel,
+// sinon le client juge la connexion morte et coupe sur timeout.
 void Server::_handlePing(int fd, const IrcMessage& message) {
     std::string token = message.params.empty() ? std::string() : message.params[0];
     this->sendToClient(fd, "PONG ft_irc :" + token + "\r\n");
 }
 
-// [ROLE] : Flushes queued bytes from a client's output buffer via send().
-// [WHEN TO USE] : Called when poll() triggers POLLOUT on a client socket descriptor.
+// Appelee quand poll() signale POLLOUT sur une socket cliente.
 void Server::_writeClientData(int fd) {
     std::map<int, Client>::iterator clientIt = this->_clients.find(fd);
     if (clientIt == this->_clients.end()) {
@@ -317,8 +329,8 @@ void Server::_writeClientData(int fd) {
     Client& client = clientIt->second;
 
     if (!client.hasOutputData()) {
-        // Nothing left to write: stop polling for writability so the loop
-        // does not keep waking up for an event we no longer care about.
+        // Plus rien a ecrire : on desarme POLLOUT pour que poll() cesse de se
+        // reveiller sur un evenement dont on n'a plus rien a faire.
         std::vector<struct pollfd>::iterator pollIt = this->_findPollFd(fd);
         if (pollIt != this->_pollFds.end()) {
             pollIt->events &= ~POLLOUT;
@@ -329,17 +341,17 @@ void Server::_writeClientData(int fd) {
     const std::string& outputBuffer = client.getOutputBuffer();
     ssize_t bytesSent = send(fd, outputBuffer.c_str(), outputBuffer.size(), 0);
 
+    // poll() a signale POLLOUT : la socket a de la place, donc send() ecrit au
+    // moins un octet ou echoue pour de bon. Comme pour recv(), pas d'errno : un
+    // echec vaut deconnexion, on ne reessaie pas sur la base d'un EAGAIN.
     if (bytesSent < 0) {
-        if (errno == EAGAIN || errno == EWOULDBLOCK) {
-            return; // Socket buffer full for now, retry on the next POLLOUT.
-        }
         std::cerr << "[ERROR] Send failure on FD " << fd << std::endl;
         this->_disconnectClient(fd);
         return;
     }
 
-    // Only the bytes the kernel actually accepted are removed: send() on a
-    // non-blocking socket may write less than the full buffer in one call.
+    // Seuls les octets reellement acceptes par le noyau sont retires : sur une
+    // socket non bloquante, send() peut n'en prendre qu'une partie.
     client.clearOutputBuffer(static_cast<size_t>(bytesSent));
 
     if (!client.hasOutputData()) {
@@ -350,17 +362,27 @@ void Server::_writeClientData(int fd) {
     }
 }
 
-// [ROLE] : Closes client socket and removes it from poll array and client map.
-void Server::_disconnectClient(int fd) {
-     // NOUVEAU : retirer le client de tous ses channels, prévenir les
-    // membres restants, purger les channels devenus vides.
+// Point de sortie unique, quelle que soit la cause : QUIT, fermeture propre,
+// socket tuee, erreur. Nettoie les trois registres ensemble.
+void Server::_disconnectClient(int fd, const std::string& reason) {
+    // Le QUIT part AVANT tout retrait, pour que _broadcastToPeers voie encore
+    // les channels du partant. Rien pour un client jamais enregistre : personne
+    // ne connait son pseudo.
+    std::map<int, Client>::iterator clientIt = this->_clients.find(fd);
+    if (clientIt != this->_clients.end() && clientIt->second.getIsRegistered()) {
+        std::string quitMsg = ":" + clientIt->second.getPrefix() + " QUIT :" + reason + "\r\n";
+        this->_broadcastToPeers(fd, quitMsg, false);
+    }
+
+    // Retrait de tous les channels, puis purge de ceux devenus vides.
     for (std::map<std::string, Channel>::iterator it = this->_channels.begin();
          it != this->_channels.end(); ) {
-        if (it->second.isMember(fd)) {
-            it->second.removeMember(fd);
-            it->second.removeOperator(fd);
-            // annoncer le départ aux membres restants si besoin
-        }
+        it->second.removeMember(fd);
+        it->second.removeOperator(fd);
+        // _invited aussi : les fds sont recycles par le noyau, et un nouveau
+        // client heriterait sinon de l'invitation de l'ancien sous +i.
+        it->second.removeInvited(fd);
+
         if (it->second.isEmpty()) {
             this->_channels.erase(it++);   // pattern d'incrémentation avant erase — obligatoire en C++98
         } else {
@@ -378,7 +400,8 @@ void Server::_disconnectClient(int fd) {
     this->_clients.erase(fd);
 }
 
-// [ROLE] : Locates the pollfd entry tracking a given socket fd.
+// Recherche lineaire de l'entree pollfd d'un fd, centralisee ici parce que tous
+// les endroits qui basculent POLLOUT en ont besoin.
 std::vector<struct pollfd>::iterator Server::_findPollFd(int fd) {
     for (std::vector<struct pollfd>::iterator it = this->_pollFds.begin(); it != this->_pollFds.end(); ++it) {
         if (it->fd == fd) {
@@ -393,7 +416,7 @@ std::vector<struct pollfd>::iterator Server::_findPollFd(int fd) {
 /*                         PUBLIC CORE METHODS                                */
 /* ========================================================================== */
 
-// [ROLE] : Main execution loop using poll multiplexing.
+// Boucle principale, et unique poll() du projet.
 void Server::start() {
     this->_initServerSocket();
     this->_isRunning = true;
@@ -401,23 +424,22 @@ void Server::start() {
     std::cout << "[SUCCESS] IRC Server listening on port " << this->_port << "..." << std::endl;
 
     while (this->_isRunning) {
-        // Poll for ready descriptors with unlimited timeout (-1)
+        // Le -1 = pas de delai maximum : le serveur dort a 0% de CPU tant que
+        // rien n'arrive sur aucune des sockets surveillees.
         int pollCount = poll(&this->_pollFds[0], this->_pollFds.size(), -1);
 
         if (pollCount < 0) {
+            // Cas normal : le handler SIGINT/SIGQUIT a mis _isRunning a false.
+            // Sinon on rappelle simplement poll(), sans lire errno, pour que tout
+            // le serveur reste exempt de logique pilotee par errno.
             if (!this->_isRunning) {
-                break; // Graceful shutdown via signal interrupt (EINTR from Ctrl+C)
+                break;
             }
-            if (errno == EINTR) {
-                continue; // Interrupted by an unrelated signal, just poll again
-            }
-            throw std::runtime_error("Poll system call failure");
+            continue;
         }
 
-        // Iterate over monitored socket descriptors. Indices are re-checked
-        // rather than advanced whenever a client is disconnected mid-loop,
-        // because _disconnectClient() erases from _pollFds and shifts every
-        // following element one slot to the left.
+        // Parcours par indice : _disconnectClient() efface dans _pollFds, ce qui
+        // fait glisser d'une case tous les elements suivants (d'ou les --i).
         for (size_t i = 0; i < this->_pollFds.size(); ++i) {
             int fd = this->_pollFds[i].fd;
             short revents = this->_pollFds[i].revents;
@@ -434,32 +456,40 @@ void Server::start() {
                 continue;
             }
 
-            // A hangup or error takes priority over anything else reported
-            // for this fd: the client is gone, do not touch it any further.
-            if (revents & (POLLHUP | POLLERR | POLLNVAL)) {
-                this->_disconnectClient(fd);
-                --i;
-                continue;
-            }
-
-            if (revents & POLLIN) {
-                if (!this->_readClientData(fd)) {
-                    --i; // fd was disconnected: _pollFds shifted, re-check index i
+            // Filet de securite : une exception remontant d'un handler coute la
+            // connexion fautive, dont le retrait libere la memoire, jamais le
+            // process entier.
+            try {
+                // Un raccrochage ou une erreur passe avant tout le reste : le
+                // client est parti, on n'y touche plus.
+                if (revents & (POLLHUP | POLLERR | POLLNVAL)) {
+                    this->_disconnectClient(fd);
+                    --i;
                     continue;
                 }
-            }
 
-            if (revents & POLLOUT) {
-                this->_writeClientData(fd);
+                if (revents & POLLIN) {
+                    if (!this->_readClientData(fd)) {
+                        --i; // fd deconnecte : _pollFds a glisse, on reexamine i
+                        continue;
+                    }
+                }
+
+                if (revents & POLLOUT) {
+                    this->_writeClientData(fd);
+                }
+            } catch (const std::exception& e) {
+                std::cerr << "[ERROR] FD " << fd << " dropped after exception: "
+                          << e.what() << std::endl;
+                this->_disconnectClient(fd);
+                --i;
             }
         }
     }
 }
 
-// [ROLE] : Queues a message in a client's output buffer and arms POLLOUT.
-// [WHEN TO USE] : The single entry point for command handlers to reply to a
-//                 client. The actual send() only ever happens inside the
-//                 poll() loop, via _writeClientData(), never here.
+// Seule facon pour un handler de repondre a un client. Le send() reel n'a lieu
+// que dans la boucle poll(), via _writeClientData(), jamais ici.
 void Server::sendToClient(int fd, const std::string& message) {
     std::map<int, Client>::iterator clientIt = this->_clients.find(fd);
     if (clientIt == this->_clients.end()) {
@@ -473,15 +503,13 @@ void Server::sendToClient(int fd, const std::string& message) {
     }
 }
 
-// [ROLE] : Async-signal-safe stop request, used by the SIGINT/SIGQUIT handler.
-// [WHY] : stop() closes sockets and clears STL containers, which is unsafe to run
-//         from inside a signal handler; this only sets the flag that the poll()
-//         loop in start() already checks once it is interrupted (EINTR).
+// Ne fait que baisser le drapeau : stop() ferme des sockets et vide des
+// conteneurs STL, ce qui n'est pas sur depuis un handler de signal.
 void Server::requestStop() {
     this->_isRunning = false;
 }
 
-// [ROLE] : Stops main loop and closes all client and listening sockets cleanly.
+// Ferme toutes les sockets et vide les registres.
 void Server::stop() {
     if (!this->_isRunning && this->_serverSocketFd == -1) {
         return;

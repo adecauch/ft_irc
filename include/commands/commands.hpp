@@ -6,23 +6,21 @@
 /* ========================================================================== */
 /*                      IRC COMMAND IDENTIFIERS                               */
 /*                                                                            */
-/*  This file centralizes all string definitions and enum values for IRC      */
-/*  commands used across the server's parser and command execution modules.   */
+/*  Centralise les noms de commandes et leurs valeurs d'enumeration, partages  */
+/*  par le parsing et l'execution.                                            */
 /* ========================================================================== */
 
 // -----------------------------------------------------------------------------
 //  1. STRING DEFINITIONS (IRC COMMAND STRINGS)
 // -----------------------------------------------------------------------------
 
-// [ROLE] : Authentication & Connection Handshake
-// [WHEN TO USE] : Used by the parser to identify client registration commands.
+// Poignee de main et fin de session.
 # define CMD_PASS     "PASS"     // Sets or validates the server password
 # define CMD_NICK     "NICK"     // Sets or changes the client's nickname
 # define CMD_USER     "USER"     // Specifies username, hostname, and real name
 # define CMD_QUIT     "QUIT"     // Terminates the client session cleanly
 
-// [ROLE] : Channel Operations & Administration
-// [WHEN TO USE] : Used when clients attempt to join, leave, or modify channels.
+// Operations sur les channels.
 # define CMD_JOIN     "JOIN"     // Joins or creates a channel
 # define CMD_PART     "PART"     // Leaves one or more channels
 # define CMD_TOPIC    "TOPIC"    // Views or changes a channel's topic
@@ -30,8 +28,7 @@
 # define CMD_INVITE   "INVITE"   // Invites a user to a restricted channel
 # define CMD_MODE     "MODE"     // Alters channel/user modes (+i, +t, +k, +o, +l)
 
-// [ROLE] : Communication & Network Utilities
-// [WHEN TO USE] : Handled during messaging and heartbeats.
+// Messages et utilitaires reseau.
 # define CMD_PRIVMSG  "PRIVMSG"  // Sends a private message to a user or channel
 # define CMD_NOTICE   "NOTICE"   // Sends a notification (must not generate automated replies)
 # define CMD_PING     "PING"     // Tests connection responsiveness from peer
@@ -44,19 +41,18 @@
 //  2. ENUM FOR LOGIC & EXECUTION ROUTING
 // -----------------------------------------------------------------------------
 
-// [ROLE] : Fast command identification using numerical representations.
-// [WHY] : Comparing enums in switch statements is significantly faster than
-//         performing repeated string comparisons during execution.
+// Une valeur par commande, pour pouvoir faire un switch au dispatch plutot que
+// d'eparpiller des comparaisons de chaines dans tout le code.
 enum e_command
 {
     CMD_UNKNOWN = 0,
-    
+
     // Auth
     CMD_ENUM_PASS,
     CMD_ENUM_NICK,
     CMD_ENUM_USER,
     CMD_ENUM_QUIT,
-    
+
     // Channels
     CMD_ENUM_JOIN,
     CMD_ENUM_PART,
@@ -64,7 +60,7 @@ enum e_command
     CMD_ENUM_KICK,
     CMD_ENUM_INVITE,
     CMD_ENUM_MODE,
-    
+
     // Messages & Utils
     CMD_ENUM_PRIVMSG,
     CMD_ENUM_NOTICE,
@@ -79,11 +75,8 @@ enum e_command
 //  3. STRING -> ENUM RESOLUTION
 // -----------------------------------------------------------------------------
 
-// [ROLE] : Maps a parsed command word to its e_command identifier.
-// [WHEN TO USE] : Called right after Parser::parse(), before dispatching.
-// [WHY] : Expects the command already uppercased (Parser::parse() does this),
-//         so this only does exact matches against the CMD_* strings above.
-// [RETURN] : CMD_UNKNOWN when the word does not match any known command.
+// Traduit un mot de commande deja en majuscules en sa valeur d'enumeration.
+// Renvoie CMD_UNKNOWN si le mot ne correspond a aucune commande connue.
 e_command resolveCommand(const std::string& command);
 
 #endif

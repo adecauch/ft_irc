@@ -9,7 +9,7 @@ class Channel {
     private:
         std::string      _name;          // "#foo", tel que fourni au premier JOIN
         std::string      _topic;
-        bool              _hasTopic;
+        bool              _hasTopic;     // distingue "pas de sujet" de "sujet vide"
 
         std::set<int>     _members;      // fds
         std::set<int>     _operators;     // sous-ensemble de _members
@@ -51,6 +51,8 @@ class Channel {
         // -----------------------------------------------------------------------------
         //                         Member Functions
         // -----------------------------------------------------------------------------
+        // Un std::set ignore un second insert/erase du meme fd : les appelants
+        // n'ont donc jamais besoin de tester isMember() avant.
         void        addMember(int fd);
         void        removeMember(int fd);
         bool        isMember(int fd) const;
@@ -67,12 +69,13 @@ class Channel {
         // -----------------------------------------------------------------------------
         //                         Divers
         // -----------------------------------------------------------------------------
-        // Invités (+i)
+        // Invités (+i). Une invitation ne vaut que pour un seul JOIN.
         void        invite(int fd);
         bool        isInvited(int fd) const;
         void        removeInvited(int fd);
 
-        // Topic
+        // Topic. clearTopic() efface vraiment : une relecture repond 331, pas
+        // un 332 vide.
         const std::string& getTopic() const;
         bool        hasTopic() const;
         void        setTopic(const std::string& topic);

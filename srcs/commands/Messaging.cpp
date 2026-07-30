@@ -3,8 +3,8 @@
 #include <cctype>
 
 
-// compare les caractere pas de diff entre minuscule majuscule
 namespace {
+// Compare les caracteres sans distinguer minuscules et majuscules.
 bool equalsIgnoreCase(const std::string& a, const std::string& b) {
     if (a.size() != b.size()) return false;
     for (std::size_t i = 0; i < a.size(); ++i) {
@@ -16,7 +16,7 @@ bool equalsIgnoreCase(const std::string& a, const std::string& b) {
 }
 }
 
-// cherce dans la map stockant tout les cleint l'adresse du client et le renvoie
+// Cherche dans la map des clients l'adresse du client vise et la renvoie.
 Client* Server::_findClientByNickname(const std::string& nickname) {
     for (std::map<int, Client>::iterator it = this->_clients.begin();
          it != this->_clients.end(); ++it) {
@@ -27,7 +27,8 @@ Client* Server::_findClientByNickname(const std::string& nickname) {
     return NULL;
 }
 
-// [ROLE] : PRIVMSG <nick> :<message> — message privé entre deux clients.
+// PRIVMSG <cible> :<message>. La cible est un channel si elle commence par '#',
+// un pseudo sinon.
 void Server::_handlePrivmsg(int fd, Client& client, const IrcMessage& message) {
     if (message.params.empty()) {
         this->sendToClient(fd, ERR_NORECIPIENT(client.getNickname()));   // 411
@@ -40,9 +41,8 @@ void Server::_handlePrivmsg(int fd, Client& client, const IrcMessage& message) {
 
     const std::string& target = message.params[0];
 
-    // Une cible commençant par '#' est un channel, pas un nick (audit 5.3) :
-    // même préfixe ":<nick>", mais diffusion à tous les membres sauf
-    // l'émetteur au lieu d'un envoi à un seul destinataire.
+    // Vers un channel : diffusion a tous les membres sauf l'emetteur, qui ne
+    // s'echoie pas a lui-meme (contrairement a JOIN ou PART).
     if (!target.empty() && target[0] == '#') {
         Channel* channel = this->_findChannel(target);
         if (channel == NULL) {
@@ -54,7 +54,7 @@ void Server::_handlePrivmsg(int fd, Client& client, const IrcMessage& message) {
             return;
         }
 
-        std::string out = ":" + client.getNickname() + " PRIVMSG " + target
+        std::string out = ":" + client.getPrefix() + " PRIVMSG " + target
                          + " :" + message.params[1] + "\r\n";
         this->_broadcastToChannel(*channel, out, fd);
         return;
@@ -66,7 +66,7 @@ void Server::_handlePrivmsg(int fd, Client& client, const IrcMessage& message) {
         return;
     }
 // construction puis envoie du bon messages
-    std::string out = ":" + client.getNickname() + " PRIVMSG " + target
+    std::string out = ":" + client.getPrefix() + " PRIVMSG " + target
                      + " :" + message.params[1] + "\r\n";
     this->sendToClient(targetClient->getFd(), out);
 }

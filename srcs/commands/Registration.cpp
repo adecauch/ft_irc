@@ -7,13 +7,13 @@
 /* ========================================================================== */
 /*                      REGISTRATION HANDSHAKE: PASS / NICK / USER            */
 /*                                                                            */
-/*  Implements Server's registration-related private methods, declared in    */
-/*  include/Server.hpp alongside everything else — split out here purely to  */
-/*  keep Server.cpp focused on the network core.                             */
+/*  Methodes de Server, declarees dans include/Server.hpp, sorties ici pour   */
+/*  garder Server.cpp concentre sur le coeur reseau.                          */
 /* ========================================================================== */
 
 namespace {
 
+// Les pseudos IRC sont insensibles a la casse : "Bob" et "bob" collisionnent.
 bool equalsIgnoreCase(const std::string& a, const std::string& b) {
     if (a.size() != b.size()) {
         return false;
@@ -26,10 +26,8 @@ bool equalsIgnoreCase(const std::string& a, const std::string& b) {
     return true;
 }
 
-// [WHY] : Loosely RFC 1459 (letter, then up to 8 letters/digits/"-"/specials).
-//         Deliberately lenient rather than pedantic: rejecting a nickname a
-//         real client tries by default would break "must connect without
-//         error" for no benefit — this only needs to keep the protocol sane.
+// Lettre, puis jusqu'a 8 caracteres alphanumeriques ou speciaux autorises.
+// Tolerant a dessein : refuser un pseudo propose par un vrai client casserait tout.
 bool isValidNickname(const std::string& nick) {
     if (nick.empty() || nick.size() > 9) {
         return false;
@@ -51,7 +49,7 @@ bool isValidNickname(const std::string& nick) {
 
 }
 
-// [ROLE] : PASS <password> — validates against the server's own password.
+// PASS <password> : compare au mot de passe passe en argument du programme.
 void Server::_handlePass(int fd, Client& client, const IrcMessage& message) {
     if (message.params.empty()) {
         this->sendToClient(fd, ERR_NEEDMOREPARAMS(client.getNickname(), message.command));
@@ -71,7 +69,7 @@ void Server::_handlePass(int fd, Client& client, const IrcMessage& message) {
     this->_tryCompleteRegistration(fd, client);
 }
 
-// [ROLE] : NICK <nickname> — sets or changes the client's nickname.
+// NICK <nickname> : pose ou change le pseudo.
 void Server::_handleNick(int fd, Client& client, const IrcMessage& message) {
     if (message.params.empty() || message.params[0].empty()) {
         this->sendToClient(fd, ERR_NONICKNAMEGIVEN(client.getNickname()));
@@ -90,14 +88,28 @@ void Server::_handleNick(int fd, Client& client, const IrcMessage& message) {
         return;
     }
 
+    if (client.getNickname() == newNick) {
+        return;
+    }
+
+    // Construit AVANT le renommage : un NICK s'annonce avec l'ANCIENNE identite
+    // en prefixe, sinon le destinataire ne peut plus faire le lien.
+    std::string nickMsg = ":" + client.getPrefix() + " NICK :" + newNick + "\r\n";
+
     client.setNickname(newNick);
+
+    // Avant l'enregistrement personne ne connait ce client : rien a annoncer, le
+    // pseudo fera partie de la salve 001-004.
+    if (client.getIsRegistered()) {
+        this->_broadcastToPeers(fd, nickMsg, true);
+        return;
+    }
+
     this->_tryCompleteRegistration(fd, client);
 }
 
-// [ROLE] : USER <username> <mode> <unused> :<realname> — completes identity.
-// [WHY] : <mode> and <unused> are historical/vestigial fields real ircds also
-//         ignore; the hostname comes from the actual TCP connection, never
-//         from anything the client claims.
+// USER <username> <mode> <unused> :<realname>. <mode> et <unused> sont ignores,
+// comme le font les vrais serveurs : ce sont des vestiges historiques.
 void Server::_handleUser(int fd, Client& client, const IrcMessage& message) {
     if (message.params.size() < 4) {
         this->sendToClient(fd, ERR_NEEDMOREPARAMS(client.getNickname(), message.command));
@@ -114,8 +126,8 @@ void Server::_handleUser(int fd, Client& client, const IrcMessage& message) {
     this->_tryCompleteRegistration(fd, client);
 }
 
-// [ROLE] : Case-insensitive uniqueness check across every connected client.
-// [WHY] : IRC nicknames are case-insensitive ("Bob" and "bob" collide).
+// excludeFd laisse un client garder ou reprendre son propre pseudo sans se
+// heurter a lui-meme.
 bool Server::_isNicknameInUse(const std::string& nickname, int excludeFd) const {
     for (std::map<int, Client>::const_iterator it = this->_clients.begin(); it != this->_clients.end(); ++it) {
         if (it->first == excludeFd) {
@@ -128,8 +140,8 @@ bool Server::_isNicknameInUse(const std::string& nickname, int excludeFd) const 
     return false;
 }
 
-// [ROLE] : Sends the 001-004 welcome burst once PASS+NICK+USER have all
-//          succeeded, exactly once.
+// Appelee apres chaque succes de PASS/NICK/USER. Idempotente : ne fait rien
+// tant que les trois ne sont pas la, et rien de plus une fois la salve envoyee.
 void Server::_tryCompleteRegistration(int fd, Client& client) {
     if (client.getIsRegistered()) {
         return;
