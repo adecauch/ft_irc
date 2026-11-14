@@ -6,7 +6,7 @@
 
 [English](#english) | [Français](#francais)
 
-<!-- Future shared demo: add irc.gif at the repository root, then replace this comment with ![ft_irc Demo](irc.gif). -->
+![ft_irc Demo](inception.gif)
 ---
 
 <a id="english"></a>
