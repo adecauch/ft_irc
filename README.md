@@ -21,8 +21,6 @@ ft_irc belongs to the École 42 Paris common core curriculum, a project-based, p
 
 The project brings together **low-level network programming, TCP/IP sockets, simultaneous connection management, event-driven I/O, object-oriented C++ design and application-state management**. In this implementation, a single event loop coordinates network readiness, client registration, message routing and channel permissions without threads or child processes.
 
-The project is credited to **adecauch, ramahrez and anturtsc**. The existing project documentation records Claude assistance with robustness review and fixes, message prefixes, test preparation and documentation; it does not establish an individual division of implementation responsibilities.
-
 <a id="en-overview"></a>
 ### 2. Overview
 
@@ -309,8 +307,6 @@ QUIT :Goodbye
 ft_irc s'inscrit dans le tronc commun de l'École 42 Paris, une formation par projets et apprentissage entre pairs. Son objectif est de développer un serveur IRC permettant à plusieurs utilisateurs connectés en TCP de communiquer par texte, en implémentant les mécanismes réseau et protocolaires plutôt qu'en utilisant une bibliothèque de serveur IRC existante.
 
 Le projet mobilise la **programmation réseau bas niveau, les sockets TCP/IP, la gestion de connexions simultanées, les entrées/sorties événementielles, la conception orientée objet en C++ et la gestion de l'état applicatif**. Dans cette implémentation, une seule boucle événementielle coordonne la disponibilité réseau, l'enregistrement des clients, le routage des messages et les permissions des channels, sans threads ni processus enfants.
-
-Le projet est crédité à **adecauch, ramahrez et anturtsc**. La documentation existante du projet mentionne une assistance de Claude pour la relecture et les corrections de robustesse, les préfixes des messages, la préparation des tests et la documentation ; elle n'établit pas de répartition individuelle des responsabilités d'implémentation.
 
 <a id="fr-presentation"></a>
 ### 2. Présentation
